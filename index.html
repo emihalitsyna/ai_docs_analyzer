@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>AI Doc Analyzer</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 2rem auto; }
+    h1 { text-align: center; }
+    .status { margin-bottom: 1rem; }
+    .status span { padding: 4px 8px; border-radius: 4px; color: #fff; }
+    .status .ok { background: #2ecc71; }
+    .status .bad { background: #e74c3c; }
+    #history { margin-top: 2rem; }
+    ul { list-style: none; padding: 0; }
+    li { margin: 0.3rem 0; }
+    textarea { width: 100%; height: 300px; }
+    #toast { position: fixed; right: 1rem; bottom: 1rem; background: #333; color:#fff; padding:1rem; border-radius:4px; opacity:0; transition:opacity 0.3s; }
+  </style>
+</head>
+<body>
+  <h1>AI-анализ технических документов</h1>
+  <div class="status">Статус сервера: <span id="status-indicator" class="bad">…</span></div>
+  <form id="upload-form">
+    <input type="file" name="document" accept="application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required />
+    <button type="submit">Загрузить</button>
+  </form>
+
+  <div id="history">
+    <h2>История анализов</h2>
+    <ul id="history-list"></ul>
+  </div>
+
+  <h2>Содержимое анализа</h2>
+  <textarea id="analysis-content" readonly placeholder="Выберите анализ из истории…"></textarea>
+
+  <div id="toast"></div>
+
+  <script>
+    async function fetchStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const json = await res.json();
+        const indicator = document.getElementById('status-indicator');
+        if (json.server === 'running') {
+          indicator.textContent = 'online';
+          indicator.classList.remove('bad');
+          indicator.classList.add('ok');
+        } else {
+          indicator.textContent = 'offline';
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    async function loadHistory() {
+      const list = document.getElementById('history-list');
+      list.innerHTML = '';
+      const res = await fetch('/api/analyses');
+      const files = await res.json();
+      if (!files.length) list.innerHTML = '<li>Нет данных</li>';
+      files.forEach((f) => {
+        const li = document.createElement('li');
+        const a = document.createElement('a');
+        a.href = '#';
+        a.textContent = f;
+        a.addEventListener('click', async (e) => {
+          e.preventDefault();
+          const r = await fetch(`/api/analyses/${encodeURIComponent(f)}`);
+          const txt = await r.text();
+          document.getElementById('analysis-content').value = txt;
+        });
+        li.appendChild(a);
+        list.appendChild(li);
+      });
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.style.opacity = 1;
+      setTimeout(() => { t.style.opacity = 0; }, 3000);
+    }
+
+    document.getElementById('upload-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const data = new FormData(form);
+      try {
+        const res = await fetch('/upload', { method: 'POST', body: data });
+        const json = await res.json();
+        if (json.success) {
+          showToast('Анализ выполнен успешно');
+          loadHistory();
+        } else {
+          showToast('Ошибка: ' + (json.error || 'unknown'));
+        }
+      } catch (err) {
+        showToast('Ошибка сети');
+      }
+    });
+
+    // initial
+    fetchStatus();
+    loadHistory();
+  </script>
+</body>
+</html> 
