@@ -92,7 +92,7 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
 
 // History list endpoint
 app.get("/api/analyses", (req, res) => {
-  const dir = path.join(path.resolve(), "backend/analysis_results");
+  const dir = path.join("/tmp", "analysis_results");
   if (!fs.existsSync(dir)) return res.json([]);
   const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json"));
   res.json(files);
@@ -100,7 +100,7 @@ app.get("/api/analyses", (req, res) => {
 
 // Specific analysis endpoint
 app.get("/api/analyses/:file", (req, res) => {
-  const filePath = path.join(path.resolve(), "backend/analysis_results", req.params.file);
+  const filePath = path.join("/tmp", "analysis_results", req.params.file);
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Not found" });
   const data = fs.readFileSync(filePath, "utf-8");
   res.type("application/json").send(data);

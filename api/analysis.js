@@ -54,7 +54,7 @@ export default async function analyzeDocument(text, originalName) {
 
 export function saveAnalysis(jsonStr, originalName) {
   const safeName = `${path.parse(originalName).name}_${Date.now()}.json`;
-  const dir = path.join(path.resolve(), "backend/analysis_results");
+  const dir = path.join("/tmp", "analysis_results");
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const filePath = path.join(dir, safeName);
   fs.writeFileSync(filePath, jsonStr, "utf-8");
