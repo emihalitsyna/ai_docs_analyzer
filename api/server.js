@@ -1,6 +1,5 @@
 // api/server.js
 import express from "express";
-import serverlessExpress from "@codegenie/serverless-express";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
@@ -107,8 +106,7 @@ app.get("/api/analyses/:file", (req, res) => {
   res.type("application/json").send(data);
 });
 
-export const handler = serverlessExpress({ app });
-export default handler;
+export default app;
 
 // For local dev
 if (process.env.NODE_ENV !== "production") {
