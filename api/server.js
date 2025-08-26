@@ -42,8 +42,8 @@ app.get("/api/status", (req, res) => {
   });
 });
 
-// Upload endpoint
-app.post("/upload", upload.single("document"), async (req, res) => {
+// Upload endpoint (prefixed with /api for Vercel routing)
+app.post("/api/upload", upload.single("document"), async (req, res) => {
   try {
     const { path: filePath, mimetype, originalname } = req.file;
     const text = await extractText(filePath, mimetype);
