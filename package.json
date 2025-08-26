@@ -1,0 +1,28 @@
+{
+  "name": "doc_analyzer",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node api/server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@codegenie/serverless-express": "^4.17.0",
+    "@notionhq/client": "^4.0.2",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
+    "mammoth": "^1.10.0",
+    "multer": "^2.0.2",
+    "openai": "^5.15.0",
+    "pdfjs-dist": "^5.4.54"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.1",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-plugin-import": "^2.32.0"
+  }
+}
