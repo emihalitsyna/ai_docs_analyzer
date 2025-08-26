@@ -12,7 +12,7 @@ const getEnv = (key, defaultValue = undefined) => {
   throw new Error(`Required environment variable ${key} is not set`);
 };
 
-export const OPENAI_API_KEY = getEnv("OPENAI_API_KEY");
+export const OPENAI_API_KEY = process.env.OPENAI_API_KEY || null;
 export const OPENAI_MODEL = getEnv("OPENAI_MODEL", "gpt-4o-mini");
 export const OPENAI_MAX_TOKENS = Number(getEnv("OPENAI_MAX_TOKENS", "1000"));
 export const OPENAI_TEMPERATURE = Number(getEnv("OPENAI_TEMPERATURE", "0.7"));

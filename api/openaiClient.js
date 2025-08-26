@@ -7,9 +7,14 @@ import {
   OPENAI_TEMPERATURE,
 } from "../config.js";
 
-const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
+let openai = null;
+
+if (OPENAI_API_KEY) {
+  openai = new OpenAI({ apiKey: OPENAI_API_KEY });
+}
 
 export async function embedChunks(chunks) {
+  if (!openai) throw new Error("OPENAI_API_KEY not configured");
   const response = await openai.embeddings.create({
     model: "text-embedding-3-small",
     input: chunks,
@@ -18,6 +23,7 @@ export async function embedChunks(chunks) {
 }
 
 export async function chatCompletion(messages) {
+  if (!openai) throw new Error("OPENAI_API_KEY not configured");
   const completion = await openai.chat.completions.create({
     model: OPENAI_MODEL,
     temperature: OPENAI_TEMPERATURE,

@@ -1,6 +1,6 @@
 // api/extractText.js
 import fs from "fs";
-import pdfjsLib from "pdfjs-dist";
+import * as pdfjs from "pdfjs-dist/legacy/build/pdf.js";
 import mammoth from "mammoth";
 
 /**
@@ -10,7 +10,7 @@ import mammoth from "mammoth";
  */
 export async function extractPdf(filePath) {
   const data = new Uint8Array(fs.readFileSync(filePath));
-  const pdf = await pdfjsLib.getDocument({ data }).promise;
+  const pdf = await pdfjs.getDocument({ data }).promise;
   const maxPages = pdf.numPages;
   const pageTexts = [];
   for (let pageNum = 1; pageNum <= maxPages; pageNum += 1) {
