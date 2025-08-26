@@ -45,11 +45,14 @@ app.get("/api/status", (req, res) => {
 app.post("/api/upload", upload.single("document"), async (req, res) => {
   try {
     const { path: filePath, mimetype, originalname } = req.file;
+    // Fix filename mojibake (incoming latin1 -> utf8)
+    const properName = Buffer.from(originalname, "latin1").toString("utf8");
+    
     const text = await extractText(filePath, mimetype);
-    const analysisJsonStr = await analyzeDocument(text, originalname);
+    const analysisJsonStr = await analyzeDocument(text, properName);
 
     // Save locally
-    const filename = saveAnalysis(analysisJsonStr, originalname);
+    const filename = saveAnalysis(analysisJsonStr, properName);
 
     // Optional Notion export
     let notionPageId = null;
