@@ -108,6 +108,7 @@ app.get("/api/analyses/:file", (req, res) => {
 });
 
 export const handler = serverlessExpress({ app });
+export default handler;
 
 // For local dev
 if (process.env.NODE_ENV !== "production") {
