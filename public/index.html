@@ -62,6 +62,8 @@
     #analysis-content ul { padding-left:1.25rem; }
     #analysis-content li { margin:0.25rem 0; }
     #toast { position:fixed; right:1rem; bottom:1rem; background:#333; color:#fff; padding:1rem 1.25rem; border-radius:6px; opacity:0; transition:opacity 0.3s; font-size:0.9rem; }
+    #progress { width:100%; height:6px; background:var(--border); border-radius:4px; overflow:hidden; margin-top:1rem; }
+    #progress .bar { width:0%; height:100%; background:var(--accent); transition:width .3s ease; }
   </style>
 </head>
 <body>
@@ -89,6 +91,7 @@
           <div id="file-info" class="hidden"></div>
         </label>
         <button id="analyze-btn" class="btn-primary" type="submit" disabled>Загрузить и проанализировать</button>
+        <div id="progress" class="hidden"><div class="bar"></div></div>
       </form>
     </section>
 
@@ -222,6 +225,7 @@
       e.preventDefault();
       const form = e.target;
       const data = new FormData(form);
+      startProgress();
       try {
         const res = await fetch('/api/upload', { method: 'POST', body: data });
         const json = await res.json();
@@ -232,13 +236,32 @@
           const resAnalysis = await fetch(`/api/analyses/${encodeURIComponent(json.filename)}`);
           const txtAnalysis = await resAnalysis.text();
           renderAnalysis(txtAnalysis);
+          endProgress();
         } else {
           showToast('Ошибка: ' + (json.error || 'unknown'));
+          endProgress();
         }
       } catch (err) {
         showToast('Ошибка сети');
+        endProgress();
       }
     });
+
+    // Progress helpers
+    let progInt=null;
+    const startProgress=()=>{
+      const bar=document.querySelector('#progress .bar');
+      document.getElementById('progress').classList.remove('hidden');
+      bar.style.width='0%';
+      let pct=0;
+      progInt=setInterval(()=>{ if(pct<90){ pct+=4; bar.style.width=pct+'%'; }},400);
+    };
+    const endProgress=()=>{
+      clearInterval(progInt);
+      const bar=document.querySelector('#progress .bar');
+      bar.style.width='100%';
+      setTimeout(()=>document.getElementById('progress').classList.add('hidden'),600);
+    };
 
     // initial
     fetchStatus();
