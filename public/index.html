@@ -33,20 +33,15 @@
     ul { font-size: 0.95rem; }
     .status { margin-bottom: 1.5rem; }
     .chip {
-      display: inline-block;
-      padding: 2px 10px;
-      border-radius: 6px;
-      color: #fff;
-      font-weight: 600;
-      font-size: 0.75rem;
+      display:inline-flex;align-items:center;gap:4px;
+      padding:2px 10px;border-radius:12px;
+      font-weight:600;font-size:0.75rem;color:#fff;
     }
-    .chip.ok { background:#2ecc71; }
-    .chip.bad { background:#e74c3c; }
+    .chip.ok{background:#2ecc71;}
+    .chip.bad{background:#e74c3c;}
     .top-bar h1 { margin:0; font-size:2.2rem; font-weight:700; }
     .subtitle { color:#666; font-size:1rem; margin-top:0.25rem; }
-    .status-line { font-size:0.8rem; margin-top:0.25rem; color:#555; }
-    .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#e74c3c; margin-right:4px; }
-    .dot.ok { background:#2ecc71; }
+    .status-pills{display:flex;gap:0.5rem;font-size:0.8rem;margin-top:0.25rem;}
 
     .tabs { display:flex; border-bottom:1px solid var(--border); margin-top:2rem; }
     .tab { background:none; border:none; padding:0.75rem 1.25rem; cursor:pointer; font-weight:500; font-size:0.95rem; }
@@ -77,10 +72,10 @@
     <header class="top-bar">
       <h1>AI Анализ документов</h1>
       <p class="subtitle">Загрузите документ и получите структурированный анализ</p>
-      <div class="status-line">
-        <span class="dot ok"></span> <span id="status-openai">OpenAI API</span> |
-        <span class="dot" id="status-server-dot"></span> <span id="status-server">Сервер</span> |
-        <span id="status-time"></span>
+      <div class="status-pills">
+        <span id="pill-openai" class="chip bad">OpenAI API</span>
+        <span id="pill-server" class="chip bad">Сервер</span>
+        <span id="status-time" style="margin-left:auto;font-size:0.75rem;color:#777;"></span>
       </div>
     </header>
 
@@ -116,14 +111,13 @@
       try {
         const res = await fetch('/api/status');
         const json = await res.json();
-        const indicator = document.getElementById('status-indicator');
-        if (json.server === 'running') {
-          indicator.textContent = 'online';
-          indicator.classList.remove('bad');
-          indicator.classList.add('ok');
-        } else {
-          indicator.textContent = 'offline';
-        }
+        const pillOpenai=document.getElementById('pill-openai');
+        const pillServer=document.getElementById('pill-server');
+        pillOpenai.classList.toggle('ok',json.openai==='connected');
+        pillOpenai.classList.toggle('bad',json.openai!=='connected');
+        pillServer.classList.toggle('ok',json.server==='running');
+        pillServer.classList.toggle('bad',json.server!=='running');
+        document.getElementById('status-time').textContent=new Date(json.timestamp).toLocaleString();
       } catch (e) { console.error(e); }
     }
 
