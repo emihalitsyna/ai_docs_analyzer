@@ -3,23 +3,60 @@
 <head>
   <meta charset="UTF-8" />
   <title>AI Doc Analyzer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    body { font-family: Arial, sans-serif; max-width: 800px; margin: 2rem auto; }
-    h1 { text-align: center; }
-    .status { margin-bottom: 1rem; }
-    .status span { padding: 4px 8px; border-radius: 4px; color: #fff; }
-    .status .ok { background: #2ecc71; }
-    .status .bad { background: #e74c3c; }
-    #history { margin-top: 2rem; }
-    ul { list-style: none; padding: 0; }
-    li { margin: 0.3rem 0; }
-    textarea { width: 100%; height: 300px; }
-    #toast { position: fixed; right: 1rem; bottom: 1rem; background: #333; color:#fff; padding:1rem; border-radius:4px; opacity:0; transition:opacity 0.3s; }
+    :root {
+      --bg: #f7f7f5;
+      --text: #2e2e2e;
+      --accent: #0f62fe;
+      --border: #e0e0e0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      margin: 0;
+      padding: 2rem 1rem;
+      display: flex;
+      justify-content: center;
+    }
+    .container {
+      width: 100%;
+      max-width: 960px;
+    }
+    h1 { font-size: 2rem; font-weight: 700; margin: 0 0 1.5rem; }
+    .status { margin-bottom: 1.5rem; font-size: 0.9rem; }
+    .chip {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 6px;
+      color: #fff;
+      font-weight: 600;
+      font-size: 0.75rem;
+    }
+    .chip.ok { background:#2ecc71; }
+    .chip.bad { background:#e74c3c; }
+    #upload-form { display:flex; gap:0.5rem; align-items:center; margin-bottom:1.5rem; }
+    button { background: var(--accent); color:#fff; border:none; padding:0.5rem 1rem; border-radius:6px; font-weight:500; cursor:pointer; }
+    button:hover { opacity:0.9; }
+    #history { margin-top:2rem; }
+    #history h2 { margin-bottom:0.5rem; font-size:1.1rem; font-weight:600; }
+    ul { list-style:none; padding:0; margin:0; }
+    li { margin:0.25rem 0; }
+    a { color:var(--accent); text-decoration:none; }
+    a:hover { text-decoration:underline; }
+    #analysis-content { background:#fff; border:1px solid var(--border); border-radius:8px; padding:1.5rem; margin-top:1.5rem; min-height:300px; }
+    #analysis-content h3 { margin:1rem 0 0.25rem; font-size:1rem; font-weight:600; }
+    #analysis-content ul { padding-left:1.25rem; }
+    #analysis-content li { margin:0.25rem 0; }
+    #toast { position:fixed; right:1rem; bottom:1rem; background:#333; color:#fff; padding:1rem 1.25rem; border-radius:6px; opacity:0; transition:opacity 0.3s; font-size:0.9rem; }
   </style>
 </head>
 <body>
+  <div class="container">
   <h1>AI-анализ технических документов</h1>
-  <div class="status">Статус сервера: <span id="status-indicator" class="bad">…</span></div>
+  <div class="status">Статус сервера: <span id="status-indicator" class="chip bad">…</span></div>
   <form id="upload-form">
     <input type="file" name="document" accept="application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required />
     <button type="submit">Загрузить</button>
@@ -31,9 +68,10 @@
   </div>
 
   <h2>Содержимое анализа</h2>
-  <textarea id="analysis-content" readonly placeholder="Выберите анализ из истории…"></textarea>
+  <div id="analysis-content" style="border:1px solid #ccc;padding:1rem;border-radius:4px;white-space:pre-wrap;"></div>
 
   <div id="toast"></div>
+  </div>
 
   <script>
     async function fetchStatus() {
@@ -66,7 +104,7 @@
           e.preventDefault();
           const r = await fetch(`/api/analyses/${encodeURIComponent(f)}`);
           const txt = await r.text();
-          document.getElementById('analysis-content').value = txt;
+          renderAnalysis(txt);
         });
         li.appendChild(a);
         list.appendChild(li);
@@ -78,6 +116,52 @@
       t.textContent = msg;
       t.style.opacity = 1;
       setTimeout(() => { t.style.opacity = 0; }, 3000);
+    }
+
+    function renderAnalysis(raw) {
+      const container = document.getElementById('analysis-content');
+      container.innerHTML = '';
+      let data;
+      try { data = JSON.parse(raw); }
+      catch { container.textContent = raw; return; }
+
+      const createHeading = (text, level=3) => {
+        const h = document.createElement('h' + level);
+        h.textContent = text;
+        return h;
+      };
+
+      const processValue = (val) => {
+        if (Array.isArray(val)) {
+          if (val.length === 0) return;
+          const ul = document.createElement('ul');
+          val.forEach(item => {
+            const li = document.createElement('li');
+            if (typeof item === 'string') li.textContent = item;
+            else {
+              // object item
+              if (item.описание) li.innerHTML = `<strong>${item.описание}</strong>`;
+              if (item.цитата) li.innerHTML += `<br/><em>«${item.цитата}»</em>`;
+            }
+            ul.appendChild(li);
+          });
+          return ul;
+        } else if (typeof val === 'string') {
+          const p = document.createElement('p');
+          p.textContent = val;
+          return p;
+        } else if (typeof val === 'object' && val !== null) {
+          const pre = document.createElement('pre');
+          pre.textContent = JSON.stringify(val, null, 2);
+          return pre;
+        }
+      };
+
+      Object.entries(data).forEach(([key, val]) => {
+        container.appendChild(createHeading(key.replace(/_/g,' ')));
+        const node = processValue(val);
+        if (node) container.appendChild(node);
+      });
     }
 
     document.getElementById('upload-form').addEventListener('submit', async (e) => {
