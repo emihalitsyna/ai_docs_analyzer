@@ -24,6 +24,7 @@
     .container {
       width: 100%;
       max-width: 960px;
+      padding-bottom:4rem;
     }
     h1 { font-size: 2rem; font-weight: 700; margin: 0 0 1.5rem; }
     h2 { font-size: 1.25rem; font-weight: 600; margin: 1.5rem 0 0.75rem; }
@@ -46,11 +47,15 @@
     .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#e74c3c; margin-right:4px; }
     .dot.ok { background:#2ecc71; }
 
-    .tabs { display:flex; border-bottom:1px solid var(--border); margin-top:1.5rem; }
+    .tabs { display:flex; border-bottom:1px solid var(--border); margin-top:2rem; }
     .tab { background:none; border:none; padding:0.75rem 1.25rem; cursor:pointer; font-weight:500; font-size:0.95rem; }
     .tab.active { border-bottom:2px solid var(--accent); color:var(--accent); }
 
-    #upload-section { margin-top:1.5rem; }
+    #upload-section { margin-top:2rem; }
+    #history-section { margin-top:2rem; }
+    .top-bar { margin-bottom:1.5rem; }
+    #drop-zone { margin-bottom:2rem; }
+    #analysis-content { margin-top:2rem; }
     #drop-zone { display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; border:2px dashed var(--border); border-radius:8px; padding:2rem; cursor:pointer; transition:border 0.2s; }
     #drop-zone.dragover { border-color:var(--accent); }
     #drop-prompt { font-weight:600; color:var(--accent); margin:0; }
