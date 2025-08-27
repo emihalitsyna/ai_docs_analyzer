@@ -157,10 +157,28 @@
       const container = document.getElementById('analysis-content');
       container.innerHTML = '';
       let data;
-      // Remove markdown fences if present
-      const cleaned = raw.replace(/^```[a-z]*\s*/i,'').replace(/```$/,'').trim();
+      // Attempt to repair malformed JSON blocks
+      let cleaned = raw
+        .replace(/^```[a-z]*[\s\r\n]+/i,'') // leading fence
+        .replace(/```\s*$/,'') // trailing fence
+        .trim();
+
+      // Keep only first {...} pair
+      const firstBrace = cleaned.indexOf('{');
+      const lastBrace = cleaned.lastIndexOf('}');
+      if(firstBrace!==-1&&lastBrace!==-1) cleaned = cleaned.slice(firstBrace,lastBrace+1);
+
+      // remove trailing commas before closing braces/brackets
+      cleaned = cleaned.replace(/,\s*([}\]])/g,'$1');
+
+      // replace unescaped newlines inside strings (quick heuristic)
+      cleaned = cleaned.replace(/"([^"\\]*?)\n([^"\\]*?)"/g,(m,a,b)=>`"${a} ${b}"`);
+
+      console.warn('cleaned analysis', cleaned);
       try { data = JSON.parse(cleaned); }
-      catch { container.textContent = cleaned; return; }
+      catch(err) {
+        console.error('JSON parse failed', err);
+        container.textContent = raw; return; }
 
       // Build normalized map
       const normMap = {};
