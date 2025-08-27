@@ -197,24 +197,42 @@
         }
       };
 
-      const order = [
-        'наименование_компании_заказчика',
-        'технические_требования',
+      const topOrder=['наименование_компании_заказчика','технические_требования'];
+      const subOrder=[
         'функциональные_требования',
         'нефункциональные_требования',
         'инфраструктурные_требования',
         'ограничения_и_риски',
         'сроки_реализации_и_стоимость_проекта',
-        'необходимые_документы_и_поля'
-      ];
+        'необходимые_документы_и_поля'];
 
-      order.forEach((keyRaw,idx)=>{
-        const val = data[keyRaw] ?? data[order[idx]] ?? data[keyRaw.replace(/_/g,' ')];
-        if(val===undefined) return;
-        container.appendChild(createHeading(keyRaw.replace(/_/g,' ')));
-        const node = processValue(val);
+      // customer
+      const cust = normMap[topOrder[0]];
+      if(cust!==undefined){
+        container.appendChild(createHeading('Наименование заказчика'));
+        const node=processValue(cust);
         if(node) container.appendChild(node);
+      }
+
+      // technical reqs section wrapper
+      const techVal = normMap[topOrder[1]];
+      container.appendChild(createHeading('Технические требования'));
+      if(techVal!==undefined){
+        const node=processValue(techVal);
+        if(node) container.appendChild(node);
+      }
+
+      // subsections indented
+      const indentDiv=document.createElement('div');
+      indentDiv.style.paddingLeft='1rem';
+      subOrder.forEach(subKey=>{
+        const val=normMap[subKey];
+        if(val===undefined) return;
+        indentDiv.appendChild(createHeading(subKey.replace(/_/g,' '),4));
+        const n=processValue(val);
+        if(n) indentDiv.appendChild(n);
       });
+      container.appendChild(indentDiv);
     }
 
     // Tab switching
