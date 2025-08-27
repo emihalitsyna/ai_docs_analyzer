@@ -174,18 +174,17 @@
       const processValue = (val) => {
         if (Array.isArray(val)) {
           if (val.length === 0) return;
-          const ul = document.createElement('ul');
-          val.forEach(item => {
-            const li = document.createElement('li');
-            if (typeof item === 'string') li.textContent = item;
+          const div=document.createElement('div');
+          val.forEach(item=>{
+            const p=document.createElement('p');
+            if(typeof item==='string') p.textContent=item;
             else {
-              // object item
-              if (item.описание) li.innerHTML = `<strong>${item.описание}</strong>`;
-              if (item.цитата) li.innerHTML += `<br/><em>«${item.цитата}»</em>`;
+              if(item.описание) p.innerHTML=`<strong>${item.описание}</strong>`;
+              if(item.цитата) p.innerHTML+=` <em>«${item.цитата}»</em>`;
             }
-            ul.appendChild(li);
+            div.appendChild(p);
           });
-          return ul;
+          return div;
         } else if (typeof val === 'string') {
           const p = document.createElement('p');
           p.textContent = val;
@@ -207,7 +206,7 @@
         'необходимые_документы_и_поля'];
 
       // customer
-      const cust = normMap[topOrder[0]];
+      const cust = normMap[topOrder[0]] ?? normMap['заказчик'];
       if(cust!==undefined){
         container.appendChild(createHeading('Наименование заказчика'));
         const node=processValue(cust);
