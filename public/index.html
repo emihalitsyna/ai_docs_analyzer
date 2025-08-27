@@ -41,15 +41,22 @@
     }
     .chip.ok { background:#2ecc71; }
     .chip.bad { background:#e74c3c; }
-    #upload-form { display:flex; gap:0.5rem; align-items:center; margin-bottom:1.5rem; }
-    button { background: var(--accent); color:#fff; border:none; padding:0.5rem 1rem; border-radius:6px; font-weight:500; cursor:pointer; }
-    button:hover { opacity:0.9; }
-    #history { margin-top:2rem; }
-    #history h2 { margin-bottom:0.5rem; font-size:1.1rem; font-weight:600; }
-    ul { list-style:none; padding:0; margin:0; }
-    li { margin:0.25rem 0; }
-    a { color:var(--accent); text-decoration:none; }
-    a:hover { text-decoration:underline; }
+    .top-bar h1 { margin:0; font-size:1.5rem; }
+    .status-line { font-size:0.8rem; margin-top:0.25rem; color:#555; }
+    .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#e74c3c; margin-right:4px; }
+    .dot.ok { background:#2ecc71; }
+
+    .tabs { display:flex; border-bottom:1px solid var(--border); margin-top:1.5rem; }
+    .tab { background:none; border:none; padding:0.75rem 1.25rem; cursor:pointer; font-weight:500; font-size:0.95rem; }
+    .tab.active { border-bottom:2px solid var(--accent); color:var(--accent); }
+
+    #upload-section { margin-top:1.5rem; }
+    #drop-zone { display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; border:2px dashed var(--border); border-radius:8px; padding:2rem; cursor:pointer; transition:border 0.2s; }
+    #drop-zone.dragover { border-color:var(--accent); }
+    #drop-prompt { font-weight:600; color:var(--accent); margin:0; }
+    #file-info { margin-top:1rem; font-size:0.9rem; }
+    .hidden { display:none; }
+    #analyze-btn { margin-top:1.5rem; width:100%; }
     #analysis-content { background:#fff; border:1px solid var(--border); border-radius:8px; padding:1.5rem; margin-top:1.5rem; min-height:300px; }
     #analysis-content h3 { margin:1rem 0 0.25rem; font-size:1rem; font-weight:600; }
     #analysis-content ul { padding-left:1.25rem; }
@@ -59,22 +66,39 @@
 </head>
 <body>
   <div class="container">
-  <h1>AI-анализ технических документов</h1>
-  <div class="status">Статус сервера: <span id="status-indicator" class="chip bad">…</span></div>
-  <form id="upload-form">
-    <input type="file" name="document" accept="application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required />
-    <button type="submit">Загрузить</button>
-  </form>
+    <header class="top-bar">
+      <h1>AI Анализ документов</h1>
+      <div class="status-line">
+        <span class="dot ok"></span> <span id="status-openai">OpenAI API</span> |
+        <span class="dot" id="status-server-dot"></span> <span id="status-server">Сервер</span> |
+        <span id="status-time"></span>
+      </div>
+    </header>
 
-  <div id="history">
-    <h2>История анализов</h2>
-    <ul id="history-list"></ul>
-  </div>
+    <nav class="tabs">
+      <button class="tab active" data-tab="upload">Загрузка</button>
+      <button class="tab" data-tab="history">История</button>
+    </nav>
 
-  <h2>Содержимое анализа</h2>
-  <div id="analysis-content" style="border:1px solid #ccc;padding:1rem;border-radius:4px;white-space:pre-wrap;"></div>
+    <!-- Upload Section -->
+    <section id="upload-section">
+      <form id="upload-form">
+        <input type="file" id="file-input" name="document" accept="application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden />
+        <label id="drop-zone" for="file-input">
+          <p id="drop-prompt">Выберите файл или перетащите сюда</p>
+          <div id="file-info" class="hidden"></div>
+        </label>
+        <button id="analyze-btn" class="btn-primary" type="submit" disabled>Загрузить и проанализировать</button>
+      </form>
+    </section>
 
-  <div id="toast"></div>
+    <!-- History Section -->
+    <section id="history-section" class="hidden">
+      <ul id="history-list"></ul>
+    </section>
+
+    <div id="analysis-content"></div>
+    <div id="toast"></div>
   </div>
 
   <script>
@@ -167,6 +191,32 @@
         if (node) container.appendChild(node);
       });
     }
+
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{
+      document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+      btn.classList.add('active');
+      const tab=btn.dataset.tab;
+      document.getElementById('upload-section').classList.toggle('hidden',tab!=='upload');
+      document.getElementById('history-section').classList.toggle('hidden',tab!=='history');
+      if(tab==='history') loadHistory();
+    }));
+
+    // Drag & drop handling
+    const dz=document.getElementById('drop-zone');
+    const fileInput=document.getElementById('file-input');
+    const fileInfo=document.getElementById('file-info');
+
+    const showFileDetails=(file)=>{
+      fileInfo.innerHTML=`<strong>Файл:</strong> ${file.name}<br/><strong>Размер:</strong> ${(file.size/1024/1024).toFixed(2)} MB<br/><strong>Тип:</strong> ${file.type}`;
+      fileInfo.classList.remove('hidden');
+      document.getElementById('analyze-btn').disabled=false;
+    };
+
+    ;['dragenter','dragover'].forEach(evt=>dz.addEventListener(evt,e=>{e.preventDefault();dz.classList.add('dragover');}));
+    ;['dragleave','drop'].forEach(evt=>dz.addEventListener(evt,e=>{e.preventDefault();dz.classList.remove('dragover');}));
+    dz.addEventListener('drop',e=>{const f=e.dataTransfer.files[0]; if(f){fileInput.files=e.dataTransfer.files; showFileDetails(f);}});
+    fileInput.addEventListener('change',e=>{const f=e.target.files[0]; if(f) showFileDetails(f);});
 
     document.getElementById('upload-form').addEventListener('submit', async (e) => {
       e.preventDefault();
