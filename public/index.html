@@ -188,10 +188,23 @@
         }
       };
 
-      Object.entries(data).forEach(([key, val]) => {
-        container.appendChild(createHeading(key.replace(/_/g,' ')));
+      const order = [
+        'наименование_компании_заказчика',
+        'технические_требования',
+        'функциональные_требования',
+        'нефункциональные_требования',
+        'инфраструктурные_требования',
+        'ограничения_и_риски',
+        'сроки_реализации_и_стоимость_проекта',
+        'необходимые_документы_и_поля'
+      ];
+
+      order.forEach((keyRaw,idx)=>{
+        const val = data[keyRaw] ?? data[order[idx]] ?? data[keyRaw.replace(/_/g,' ')];
+        if(val===undefined) return;
+        container.appendChild(createHeading(keyRaw.replace(/_/g,' ')));
         const node = processValue(val);
-        if (node) container.appendChild(node);
+        if(node) container.appendChild(node);
       });
     }
 
