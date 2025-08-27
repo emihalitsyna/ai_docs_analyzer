@@ -42,7 +42,8 @@
     }
     .chip.ok { background:#2ecc71; }
     .chip.bad { background:#e74c3c; }
-    .top-bar h1 { margin:0; font-size:1.5rem; }
+    .top-bar h1 { margin:0; font-size:2.2rem; font-weight:700; }
+    .subtitle { color:#666; font-size:1rem; margin-top:0.25rem; }
     .status-line { font-size:0.8rem; margin-top:0.25rem; color:#555; }
     .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#e74c3c; margin-right:4px; }
     .dot.ok { background:#2ecc71; }
@@ -75,6 +76,7 @@
   <div class="container">
     <header class="top-bar">
       <h1>AI Анализ документов</h1>
+      <p class="subtitle">Загрузите документ и получите структурированный анализ</p>
       <div class="status-line">
         <span class="dot ok"></span> <span id="status-openai">OpenAI API</span> |
         <span class="dot" id="status-server-dot"></span> <span id="status-server">Сервер</span> |
