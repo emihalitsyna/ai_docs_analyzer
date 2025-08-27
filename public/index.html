@@ -43,9 +43,10 @@
     .subtitle { color:#666; font-size:1rem; margin-top:0.25rem; }
     .status-pills{display:flex;gap:0.5rem;font-size:0.8rem;margin-top:0.25rem;}
 
-    .tabs { display:flex; border-bottom:1px solid var(--border); margin-top:2rem; }
-    .tab { background:none; border:none; padding:0.75rem 1.25rem; cursor:pointer; font-weight:500; font-size:0.95rem; }
-    .tab.active { border-bottom:2px solid var(--accent); color:var(--accent); }
+    .tabs { display:flex; gap:0.5rem; margin-top:2rem; }
+    .tab { background:#fff; border:1px solid var(--border); padding:0.5rem 1.25rem; border-radius:20px; cursor:pointer; font-weight:500; font-size:0.95rem; box-shadow:0 1px 3px rgba(0,0,0,0.04); transition:background 0.2s,border 0.2s; }
+    .tab:hover { background:#f2f2f2; }
+    .tab.active { background:var(--accent); color:#fff; border-color:var(--accent); box-shadow:0 2px 6px rgba(0,0,0,0.08); }
 
     #upload-section { margin-top:2rem; }
     #history-section { margin-top:2rem; }
