@@ -153,8 +153,17 @@
       const container = document.getElementById('analysis-content');
       container.innerHTML = '';
       let data;
-      try { data = JSON.parse(raw); }
-      catch { container.textContent = raw; return; }
+      // Remove markdown fences if present
+      const cleaned = raw.replace(/^```[a-z]*\s*/i,'').replace(/```$/,'').trim();
+      try { data = JSON.parse(cleaned); }
+      catch { container.textContent = cleaned; return; }
+
+      // Build normalized map
+      const normMap = {};
+      Object.entries(data).forEach(([k,v])=>{
+        const norm = k.toLowerCase().replace(/\s+/g,'_');
+        normMap[norm]=v;
+      });
 
       const createHeading = (text, level=3) => {
         const h = document.createElement('h' + level);
