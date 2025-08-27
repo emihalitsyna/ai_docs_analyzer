@@ -84,7 +84,7 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
       }
     }
 
-    res.json({ success: true, filename, notionPageId });
+    res.json({ success: true, filename, notionPageId, analysis: analysisJsonStr });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });

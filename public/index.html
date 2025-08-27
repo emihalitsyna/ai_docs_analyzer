@@ -294,9 +294,13 @@
           showToast('Анализ выполнен успешно');
           loadHistory();
           // Fetch the newly created analysis and display
-          const resAnalysis = await fetch(`/api/analyses/${encodeURIComponent(json.filename)}`);
-          const txtAnalysis = await resAnalysis.text();
-          renderAnalysis(txtAnalysis);
+          const txtAnalysis = json.analysis ?? '';
+          if(txtAnalysis){
+            renderAnalysis(txtAnalysis);
+          } else {
+            const resAnalysis = await fetch(`/api/analyses/${encodeURIComponent(json.filename)}`);
+            renderAnalysis(await resAnalysis.text());
+          }
           endProgress();
         } else {
           showToast('Ошибка: ' + (json.error || 'unknown'));
