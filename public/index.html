@@ -228,6 +228,10 @@
         if (json.success) {
           showToast('Анализ выполнен успешно');
           loadHistory();
+          // Fetch the newly created analysis and display
+          const resAnalysis = await fetch(`/api/analyses/${encodeURIComponent(json.filename)}`);
+          const txtAnalysis = await resAnalysis.text();
+          renderAnalysis(txtAnalysis);
         } else {
           showToast('Ошибка: ' + (json.error || 'unknown'));
         }
