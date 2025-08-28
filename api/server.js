@@ -15,6 +15,9 @@ import extractText from "./extractText.js";
 import { uploadFileToVS } from "./retrieval.js";
 import analyzeDocument, { saveAnalysis } from "./analysis.js";
 import { Client as NotionClient } from "@notionhq/client";
+import os from "os";
+const STATUS_DIR = "/tmp/notion_status";
+if (!fs.existsSync(STATUS_DIR)) fs.mkdirSync(STATUS_DIR, { recursive: true });
 
 const app = express();
 app.use(express.json());
@@ -61,9 +64,10 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
     res.json({
       success: true,
       filename,
-      notionPageId: null, // will be updated only in Notion background task
+      notionPageId: null, // set after export
       analysis: analysisJsonStr,
       retrieval: { vectorStore: OPENAI_VECTOR_STORE, assistant: OPENAI_ASSISTANT_ID ? true : false },
+      notion: { queued: !!(NOTION_TOKEN && NOTION_DATABASE_ID) }
     });
 
     // ---- Background side-effects (fire-and-forget) ----
@@ -71,6 +75,8 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
     if (NOTION_TOKEN && NOTION_DATABASE_ID) {
       (async () => {
         try {
+          const statusFile = `${STATUS_DIR}/${filename}.json`;
+          fs.writeFileSync(statusFile, JSON.stringify({ status: "processing" }));
           const notion = new NotionClient({ auth: NOTION_TOKEN });
           const chunkString = (s, size = 1900) => {
             const out = [];
@@ -78,7 +84,7 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
             return out;
           };
           const chunks = chunkString(analysisJsonStr, 1900);
-          await notion.pages.create({
+          const page = await notion.pages.create({
             parent: { database_id: NOTION_DATABASE_ID },
             properties: {
               Name: { title: [{ text: { content: originalname } }] },
@@ -92,8 +98,11 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
               code: { language: "json", rich_text: [{ type: "text", text: { content: c } }] },
             })),
           });
+          fs.writeFileSync(statusFile, JSON.stringify({ status: "success", pageId: page.id }));
         } catch (notionErr) {
           console.error("Notion export error", notionErr);
+          const statusFile = `${STATUS_DIR}/${filename}.json`;
+          fs.writeFileSync(statusFile, JSON.stringify({ status: "error", message: notionErr.message }));
         }
       })();
     }
@@ -126,10 +135,23 @@ app.get("/api/analyses/:file", (req, res) => {
   res.type("application/json").send(data);
 });
 
+// Endpoint to poll Notion export status
+app.get("/api/notion-status/:file", (req, res) => {
+  const file = req.params.file;
+  const statusPath = `${STATUS_DIR}/${file}.json`;
+  if (!fs.existsSync(statusPath)) return res.json({ status: "unknown" });
+  try {
+    const data = fs.readFileSync(statusPath, "utf-8");
+    return res.type("application/json").send(data);
+  } catch (e) {
+    return res.json({ status: "error", message: e.message });
+  }
+});
+
 export default app;
 
 // For local dev
 if (process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
-} 
+}

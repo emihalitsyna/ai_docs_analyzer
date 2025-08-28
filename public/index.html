@@ -80,6 +80,7 @@
         <span id="pill-openai" class="chip bad">OpenAI API</span>
         <span id="pill-server" class="chip bad">Сервер</span>
         <span id="pill-retrieval" class="chip info">Retrieval: n/a</span>
+        <span id="pill-notion" class="chip info">Notion: n/a</span>
         <span id="status-time" style="margin-left:auto;font-size:0.75rem;color:#777;"></span>
       </div>
     </header>
@@ -266,6 +267,26 @@
       pill.textContent = `Retrieval: ${mode} (vs ${vs})`;
       pill.className = `chip ${r.vectorStore ? (r.assistant ? 'ok' : 'info') : 'bad'}`;
     }
+    function setNotionChip(state){
+      const pill=document.getElementById('pill-notion');
+      if(!state){ pill.textContent='Notion: n/a'; pill.className='chip info'; return; }
+      if(state.status==='processing'){ pill.textContent='Notion: processing…'; pill.className='chip info'; return; }
+      if(state.status==='success'){ pill.textContent='Notion: success'; pill.className='chip ok'; return; }
+      if(state.status==='error'){ pill.textContent='Notion: error'; pill.className='chip bad'; return; }
+      pill.textContent='Notion: unknown'; pill.className='chip info';
+    }
+    async function pollNotion(filename){
+      setNotionChip({status:'processing'});
+      for(let i=0;i<30;i++){ // ~30s
+        try{
+          const r = await fetch(`/api/notion-status/${encodeURIComponent(filename)}`);
+          const s = await r.json();
+          if(s.status==='success' || s.status==='error'){ setNotionChip(s); return; }
+        }catch{}
+        await new Promise(r=>setTimeout(r,1000));
+      }
+      setNotionChip({status:'unknown'});
+    }
 
     // Tab switching
     document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{
@@ -313,6 +334,7 @@
             renderAnalysis(await resAnalysis.text());
           }
           setRetrievalChip(json.retrieval);
+          if(json.notion?.queued){ pollNotion(json.filename); } else { setNotionChip(null); }
           endProgress();
         } else {
           showToast('Ошибка: ' + (json.error || 'unknown'));
