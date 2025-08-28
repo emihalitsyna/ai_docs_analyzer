@@ -41,7 +41,6 @@ export async function askWithVS(prompt) {
     const run = await client.beta.threads.runs.createAndPoll(threadId, {
       assistant_id: OPENAI_ASSISTANT_ID,
       tools: [{ type: 'file_search' }],
-      tool_choice: 'file_search',
     });
     if (run.status !== 'completed') {
       throw new Error(`Retrieval run not completed: ${run.status} (thread=${threadId}, run=${run?.id || 'unknown'})`);
@@ -59,7 +58,6 @@ export async function askWithVS(prompt) {
     attachments: [
       { file_search: { vector_store_ids: [OPENAI_VECTOR_STORE] } },
     ],
-    tool_choice: 'file_search',
   });
   return response.output_text || response.output?.[0]?.content?.map?.((c)=>c.text?.value||'').join('\n') || '';
 } 
