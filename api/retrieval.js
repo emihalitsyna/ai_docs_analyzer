@@ -12,9 +12,19 @@ const client = new OpenAI({ apiKey: OPENAI_API_KEY });
 
 export async function uploadFileToVS(filePath, displayName) {
   if (!OPENAI_VECTOR_STORE) return null;
-  const file = await client.files.create({ file: fs.createReadStream(filePath), purpose: 'assistants' });
-  await client.beta.vectorStores.files.create(OPENAI_VECTOR_STORE, { file_id: file.id });
-  return file.id;
+  const file = await client.files.create({ file: fs.createReadStream(filePath), purpose: 'assistants', filename: displayName });
+  const vsFile = await client.beta.vectorStores.files.create(OPENAI_VECTOR_STORE, { file_id: file.id });
+  const vsFileId = vsFile.id || file.id;
+  // Poll until indexing completed
+  let status = 'in_progress';
+  let attempts = 0;
+  while (status !== 'completed' && attempts < 60) { // ~60s max
+    await new Promise((r) => setTimeout(r, 1000));
+    const f = await client.beta.vectorStores.files.retrieve(OPENAI_VECTOR_STORE, vsFileId);
+    status = f.status;
+    attempts += 1;
+  }
+  return vsFileId;
 }
 
 export async function askWithVS(prompt) {
@@ -31,6 +41,7 @@ export async function askWithVS(prompt) {
     const run = await client.beta.threads.runs.createAndPoll(threadId, {
       assistant_id: OPENAI_ASSISTANT_ID,
       tools: [{ type: 'file_search' }],
+      tool_choice: 'file_search',
     });
     if (run.status !== 'completed') {
       throw new Error(`Retrieval run not completed: ${run.status} (thread=${threadId}, run=${run?.id || 'unknown'})`);
@@ -48,6 +59,7 @@ export async function askWithVS(prompt) {
     attachments: [
       { file_search: { vector_store_ids: [OPENAI_VECTOR_STORE] } },
     ],
+    tool_choice: 'file_search',
   });
   return response.output_text || response.output?.[0]?.content?.map?.((c)=>c.text?.value||'').join('\n') || '';
 } 
