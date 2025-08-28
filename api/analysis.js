@@ -3,6 +3,8 @@ import fs from "fs";
 import path from "path";
 import chunkText from "./chunker.js";
 import { embedChunks, chatCompletion } from "./openaiClient.js";
+import { askWithVS } from "./retrieval.js";
+import { OPENAI_VECTOR_STORE } from "../config.js";
 import {
   CHUNK_SIZE,
   CHUNK_OVERLAP,
@@ -29,6 +31,10 @@ const SYSTEM_PROMPT = `Ты эксперт по тендерам и аналит
 Формат ответа — читаемый JSON без лишних деталей. Если информации нет, возвращать пустой список или пустую строку.`;
 
 export default async function analyzeDocument(text, originalName) {
+  if (OPENAI_VECTOR_STORE) {
+    const prompt = `${SYSTEM_PROMPT}\n\n${text}`;
+    return await askWithVS(prompt);
+  }
   // Heuristic: if text length < 15k chars treat as small
   if (text.length < 15000) {
     const messages = [

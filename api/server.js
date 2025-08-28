@@ -10,6 +10,7 @@ import {
   MAX_FILE_SIZE_BYTES,
 } from "../config.js";
 import extractText from "./extractText.js";
+import { uploadFileToVS } from "./retrieval.js";
 import analyzeDocument, { saveAnalysis } from "./analysis.js";
 import { Client as NotionClient } from "@notionhq/client";
 
@@ -90,6 +91,8 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
     res.status(500).json({ error: err.message });
   } finally {
     if (req.file?.path) fs.unlink(req.file.path, () => {});
+    // upload original file to Vector Store asynchronously
+    if (req.file?.path) uploadFileToVS(req.file.path, originalname).catch(()=>{});
   }
 });
 

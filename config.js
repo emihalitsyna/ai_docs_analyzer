@@ -28,6 +28,10 @@ export const CHUNK_OVERLAP = Number(getEnv("CHUNK_OVERLAP", "100"));
 
 export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
+// Retrieval / Assistants API
+export const OPENAI_VECTOR_STORE = process.env.OPENAI_VECTOR_STORE || process.env.OPENAI_VECTOR_STORE_ID || null;
+export const OPENAI_ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID || null;
+
 export default {
   OPENAI_API_KEY,
   OPENAI_MODEL,
@@ -40,4 +44,6 @@ export default {
   CHUNK_SIZE,
   CHUNK_OVERLAP,
   MAX_FILE_SIZE_BYTES,
+  OPENAI_VECTOR_STORE,
+  OPENAI_ASSISTANT_ID,
 }; 
