@@ -39,6 +39,7 @@
     }
     .chip.ok{background:#2ecc71;}
     .chip.bad{background:#e74c3c;}
+    .chip.info{background:#8e8e93;}
     .top-bar h1 { margin:0; font-size:2.2rem; font-weight:700; }
     .subtitle { color:#666; font-size:1rem; margin-top:0.25rem; }
     .status-pills{display:flex;gap:0.5rem;font-size:0.8rem;margin-top:0.25rem;}
@@ -78,6 +79,7 @@
       <div class="status-pills">
         <span id="pill-openai" class="chip bad">OpenAI API</span>
         <span id="pill-server" class="chip bad">Сервер</span>
+        <span id="pill-retrieval" class="chip info">Retrieval: n/a</span>
         <span id="status-time" style="margin-left:auto;font-size:0.75rem;color:#777;"></span>
       </div>
     </header>
@@ -256,6 +258,15 @@
       container.appendChild(indentDiv);
     }
 
+    function setRetrievalChip(r){
+      const pill=document.getElementById('pill-retrieval');
+      if(!r){ pill.textContent='Retrieval: n/a'; pill.className='chip info'; return; }
+      const vs = r.vectorStore ? `${r.vectorStore.slice(0,6)}…${r.vectorStore.slice(-4)}` : 'none';
+      const mode = r.assistant ? 'assistants' : 'responses';
+      pill.textContent = `Retrieval: ${mode} (vs ${vs})`;
+      pill.className = `chip ${r.vectorStore ? (r.assistant ? 'ok' : 'info') : 'bad'}`;
+    }
+
     // Tab switching
     document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{
       document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
@@ -301,6 +312,7 @@
             const resAnalysis = await fetch(`/api/analyses/${encodeURIComponent(json.filename)}`);
             renderAnalysis(await resAnalysis.text());
           }
+          setRetrievalChip(json.retrieval);
           endProgress();
         } else {
           showToast('Ошибка: ' + (json.error || 'unknown'));
