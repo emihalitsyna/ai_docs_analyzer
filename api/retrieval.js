@@ -25,20 +25,23 @@ export async function askWithVS(prompt) {
     const thread = await client.beta.threads.create({
       tool_resources: { file_search: { vector_store_ids: [OPENAI_VECTOR_STORE] } },
     });
-    if (!thread?.id) throw new Error('Failed to create thread');
-    await client.beta.threads.messages.create(thread.id, { role: 'user', content: prompt });
-    const run = await client.beta.threads.runs.create(thread.id, {
+    const threadId = thread?.id;
+    if (!threadId) throw new Error('Failed to create thread (no id)');
+    await client.beta.threads.messages.create(threadId, { role: 'user', content: prompt });
+    const run = await client.beta.threads.runs.create(threadId, {
       assistant_id: OPENAI_ASSISTANT_ID,
       tools: [{ type: 'file_search' }],
     });
+    const runId = run?.id;
+    if (!runId) throw new Error('Failed to create run (no id)');
     let status = run.status;
     while (!['completed', 'failed', 'cancelled', 'expired'].includes(status)) {
       await new Promise((r) => setTimeout(r, 2000));
-      const rn = await client.beta.threads.runs.retrieve(thread.id, run.id);
+      const rn = await client.beta.threads.runs.retrieve(threadId, runId);
       status = rn.status;
     }
     if (status !== 'completed') throw new Error(`Retrieval run not completed: ${status}`);
-    const { data } = await client.beta.threads.messages.list(thread.id, { limit: 1, order: 'desc' });
+    const { data } = await client.beta.threads.messages.list(threadId, { limit: 1, order: 'desc' });
     const last = data[0];
     const text = last?.content?.map((c) => c.text?.value || '').join('\n').trim();
     return text;
