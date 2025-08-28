@@ -8,6 +8,8 @@ import {
   NOTION_TOKEN,
   NOTION_DATABASE_ID,
   MAX_FILE_SIZE_BYTES,
+  OPENAI_VECTOR_STORE,
+  OPENAI_ASSISTANT_ID,
 } from "../config.js";
 import extractText from "./extractText.js";
 import { uploadFileToVS } from "./retrieval.js";
@@ -47,7 +49,7 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
   try {
     const { path: filePath, mimetype, originalname } = req.file;
     // Fix filename mojibake (incoming latin1 -> utf8)
-    const properName = Buffer.from(originalname, "latin1").toString("utf8");
+    let properName = Buffer.from(originalname, "latin1").toString("utf8");
     
     const text = await extractText(filePath, mimetype);
     const analysisJsonStr = await analyzeDocument(text, properName);
@@ -55,44 +57,56 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
     // Save locally
     const filename = saveAnalysis(analysisJsonStr, originalname);
 
-    // Optional Notion export
-    let notionPageId = null;
+    // Send response to client immediately
+    res.json({
+      success: true,
+      filename,
+      notionPageId: null, // will be updated only in Notion background task
+      analysis: analysisJsonStr,
+      retrieval: { vectorStore: OPENAI_VECTOR_STORE, assistant: OPENAI_ASSISTANT_ID ? true : false },
+    });
+
+    // ---- Background side-effects (fire-and-forget) ----
+    // 1) Notion export (chunked to avoid 2k limit per block)
     if (NOTION_TOKEN && NOTION_DATABASE_ID) {
-      try {
-        const notion = new NotionClient({ auth: NOTION_TOKEN });
-        const page = await notion.pages.create({
-          parent: { database_id: NOTION_DATABASE_ID },
-          properties: {
-            Name: { title: [{ text: { content: originalname } }] },
-            "Дата загрузки": { date: { start: new Date().toISOString() } },
-            "Тип документа": { select: { name: mimetype.includes("pdf") ? "PDF" : "DOCX" } },
-            Статус: { select: { name: "Новый" } },
-          },
-          children: [
-            {
+      (async () => {
+        try {
+          const notion = new NotionClient({ auth: NOTION_TOKEN });
+          const chunkString = (s, size = 1900) => {
+            const out = [];
+            for (let i = 0; i < s.length; i += size) out.push(s.slice(i, i + size));
+            return out;
+          };
+          const chunks = chunkString(analysisJsonStr, 1900);
+          await notion.pages.create({
+            parent: { database_id: NOTION_DATABASE_ID },
+            properties: {
+              Name: { title: [{ text: { content: originalname } }] },
+              "Дата загрузки": { date: { start: new Date().toISOString() } },
+              "Тип документа": { select: { name: mimetype.includes("pdf") ? "PDF" : "DOCX" } },
+              Статус: { select: { name: "Новый" } },
+            },
+            children: chunks.map((c) => ({
               object: "block",
               type: "code",
-              code: {
-                language: "json",
-                rich_text: [{ type: "text", text: { content: analysisJsonStr } }],
-              },
-            },
-          ],
-        });
-        notionPageId = page.id;
-      } catch (notionErr) {
-        console.error("Notion export error", notionErr);
-      }
+              code: { language: "json", rich_text: [{ type: "text", text: { content: c } }] },
+            })),
+          });
+        } catch (notionErr) {
+          console.error("Notion export error", notionErr);
+        }
+      })();
     }
 
-    res.json({ success: true, filename, notionPageId, analysis: analysisJsonStr, retrieval: { vectorStore: OPENAI_VECTOR_STORE, assistant: OPENAI_ASSISTANT_ID ? true : false } });
+    // 2) Upload original file to Vector Store and then cleanup temp file
+    if (req.file?.path) {
+      uploadFileToVS(req.file.path, req.file.originalname)
+        .catch(() => {})
+        .finally(() => fs.unlink(req.file.path, () => {}));
+    }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
-  } finally {
-    // upload original file to Vector Store asynchronously before cleanup
-    if (req.file?.path) await uploadFileToVS(req.file.path, properName).catch(()=>{});
-    if (req.file?.path) fs.unlink(req.file.path, () => {});
   }
 });
 
