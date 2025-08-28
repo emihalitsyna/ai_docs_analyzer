@@ -90,9 +90,9 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
     console.error(err);
     res.status(500).json({ error: err.message });
   } finally {
+    // upload original file to Vector Store asynchronously before cleanup
+    if (req.file?.path) await uploadFileToVS(req.file.path, properName).catch(()=>{});
     if (req.file?.path) fs.unlink(req.file.path, () => {});
-    // upload original file to Vector Store asynchronously
-    if (req.file?.path) uploadFileToVS(req.file.path, originalname).catch(()=>{});
   }
 });
 

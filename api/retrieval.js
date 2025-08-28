@@ -25,6 +25,7 @@ export async function askWithVS(prompt) {
     const thread = await client.beta.threads.create({
       tool_resources: { file_search: { vector_store_ids: [OPENAI_VECTOR_STORE] } },
     });
+    if (!thread?.id) throw new Error('Failed to create thread');
     await client.beta.threads.messages.create(thread.id, { role: 'user', content: prompt });
     const run = await client.beta.threads.runs.create(thread.id, {
       assistant_id: OPENAI_ASSISTANT_ID,
