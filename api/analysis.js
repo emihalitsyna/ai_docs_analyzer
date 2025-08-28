@@ -33,7 +33,10 @@ const SYSTEM_PROMPT = `Ты эксперт по тендерам и аналит
 export default async function analyzeDocument(text, originalName) {
   if (OPENAI_VECTOR_STORE) {
     const prompt = `${SYSTEM_PROMPT}\n\n${text}`;
-    return await askWithVS(prompt);
+    const { text: out, meta } = await askWithVS(prompt);
+    // Pass-through just text; server will still save plain JSON string
+    // but we can append meta for UI if needed
+    return out;
   }
   // Heuristic: if text length < 15k chars treat as small
   if (text.length < 15000) {

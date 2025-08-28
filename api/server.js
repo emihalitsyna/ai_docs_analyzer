@@ -53,7 +53,7 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
     const analysisJsonStr = await analyzeDocument(text, properName);
 
     // Save locally
-    const filename = saveAnalysis(analysisJsonStr, properName);
+    const filename = saveAnalysis(analysisJsonStr, originalname);
 
     // Optional Notion export
     let notionPageId = null;
@@ -85,7 +85,7 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
       }
     }
 
-    res.json({ success: true, filename, notionPageId, analysis: analysisJsonStr });
+    res.json({ success: true, filename, notionPageId, analysis: analysisJsonStr, retrieval: { vectorStore: OPENAI_VECTOR_STORE, assistant: OPENAI_ASSISTANT_ID ? true : false } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });

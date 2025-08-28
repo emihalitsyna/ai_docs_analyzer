@@ -48,7 +48,7 @@ export async function askWithVS(prompt) {
     const { data } = await client.beta.threads.messages.list(threadId, { limit: 1, order: 'desc' });
     const last = data[0];
     const text = last?.content?.map((c) => c.text?.value || '').join('\n').trim();
-    return text;
+    return { text, meta: { mode: 'assistants', threadId, runId: run?.id || null, vectorStoreId: OPENAI_VECTOR_STORE } };
   }
 
   // Fallback: Responses API with attachments to Vector Store (no assistant needed)
@@ -59,5 +59,6 @@ export async function askWithVS(prompt) {
       { file_search: { vector_store_ids: [OPENAI_VECTOR_STORE] } },
     ],
   });
-  return response.output_text || response.output?.[0]?.content?.map?.((c)=>c.text?.value||'').join('\n') || '';
+  const text = response.output_text || response.output?.[0]?.content?.map?.((c)=>c.text?.value||'').join('\n') || '';
+  return { text, meta: { mode: 'responses', responseId: response.id, vectorStoreId: OPENAI_VECTOR_STORE } };
 } 
