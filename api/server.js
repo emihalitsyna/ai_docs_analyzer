@@ -136,16 +136,38 @@ app.get("/api/analyses/:file", (req, res) => {
 });
 
 // Endpoint to poll Notion export status
-app.get("/api/notion-status/:file", (req, res) => {
+app.get("/api/notion-status/:file", async (req, res) => {
   const file = req.params.file;
   const statusPath = `${STATUS_DIR}/${file}.json`;
-  if (!fs.existsSync(statusPath)) return res.json({ status: "unknown" });
-  try {
-    const data = fs.readFileSync(statusPath, "utf-8");
-    return res.type("application/json").send(data);
-  } catch (e) {
-    return res.json({ status: "error", message: e.message });
+  // 1) Try tmp status if exists
+  if (fs.existsSync(statusPath)) {
+    try {
+      const data = fs.readFileSync(statusPath, "utf-8");
+      return res.type("application/json").send(data);
+    } catch (e) {
+      // fall through
+    }
   }
+  // 2) Fallback to querying Notion DB by page title (Name contains base filename)
+  if (NOTION_TOKEN && NOTION_DATABASE_ID) {
+    try {
+      const notion = new NotionClient({ auth: NOTION_TOKEN });
+      const base = file.replace(/\.json$/i, "").replace(/_\d+$/, "");
+      const result = await notion.databases.query({
+        database_id: NOTION_DATABASE_ID,
+        filter: { property: "Name", title: { contains: base } },
+        sorts: [{ timestamp: "created_time", direction: "descending" }],
+        page_size: 1,
+      });
+      if (result.results && result.results.length > 0) {
+        const pageId = result.results[0].id;
+        return res.json({ status: "success", pageId });
+      }
+    } catch (e) {
+      return res.json({ status: "error", message: e.message });
+    }
+  }
+  return res.json({ status: "unknown" });
 });
 
 export default app;
