@@ -13,14 +13,14 @@ const client = new OpenAI({ apiKey: OPENAI_API_KEY });
 export async function uploadFileToVS(filePath, displayName) {
   if (!OPENAI_VECTOR_STORE) return null;
   const file = await client.files.create({ file: fs.createReadStream(filePath), purpose: 'assistants' });
-  const vsFile = await client.beta.vectorStores.files.create(OPENAI_VECTOR_STORE, { file_id: file.id });
+  const vsFile = await client.vectorStores.files.create(OPENAI_VECTOR_STORE, { file_id: file.id });
   const vsFileId = vsFile.id || file.id;
   // Poll until indexing completed
   let status = 'in_progress';
   let attempts = 0;
   while (status !== 'completed' && attempts < 60) { // ~60s max
     await new Promise((r) => setTimeout(r, 1000));
-    const f = await client.beta.vectorStores.files.retrieve(OPENAI_VECTOR_STORE, vsFileId);
+    const f = await client.vectorStores.files.retrieve(OPENAI_VECTOR_STORE, vsFileId);
     status = f.status;
     attempts += 1;
   }
