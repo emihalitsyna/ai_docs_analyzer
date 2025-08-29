@@ -14,17 +14,17 @@ export async function uploadFileToVS(filePath, displayName, contentType) {
   if (!OPENAI_VECTOR_STORE) return null;
   const file = await client.files.create({ file: await OpenAI.toFile(fs.createReadStream(filePath), displayName, contentType ? { contentType } : undefined), purpose: 'assistants' });
   const vsFile = await client.vectorStores.files.create(OPENAI_VECTOR_STORE, { file_id: file.id });
-  const vsFileId = vsFile.id || file.id;
+  const fileId = file.id;
   // Poll until indexing completed
   let status = 'in_progress';
   let attempts = 0;
   while (status !== 'completed' && attempts < 60) { // ~60s max
     await new Promise((r) => setTimeout(r, 1000));
-    const f = await client.vectorStores.files.retrieve(OPENAI_VECTOR_STORE, vsFileId);
+    const f = await client.vectorStores.files.retrieve(OPENAI_VECTOR_STORE, fileId);
     status = f.status;
     attempts += 1;
   }
-  return vsFileId;
+  return fileId;
 }
 
 export async function askWithVS(prompt) {
