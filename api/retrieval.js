@@ -18,19 +18,10 @@ async function ensureVectorStoreId(providedId) {
 
 export async function uploadFileToVS(filePath, displayName, contentType, vectorStoreId = OPENAI_VECTOR_STORE) {
   const vsId = await ensureVectorStoreId(vectorStoreId);
-  const file = await client.files.create({ file: await OpenAI.toFile(fs.createReadStream(filePath), displayName, contentType ? { contentType } : undefined), purpose: 'assistants' });
-  const vsFile = await client.vectorStores.files.create(vsId, { file_id: file.id });
-  const vsVectorStoreFileId = vsFile.id; // this is the vector store file association id
-  // Poll until indexing completed
-  let status = 'in_progress';
-  let attempts = 0;
-  while (status !== 'completed' && attempts < 60) { // ~60s max
-    await new Promise((r) => setTimeout(r, 1000));
-    const f = await client.vectorStores.files.retrieve(vsId, vsVectorStoreFileId);
-    status = f.status;
-    attempts += 1;
-  }
-  return { vectorStoreId: vsId, vectorStoreFileId: vsVectorStoreFileId };
+  const fileForUpload = await OpenAI.toFile(fs.createReadStream(filePath), displayName, contentType ? { contentType } : undefined);
+  // Use batch upload with built-in polling
+  await client.vectorStores.fileBatches.uploadAndPoll(vsId, { files: [fileForUpload] });
+  return { vectorStoreId: vsId };
 }
 
 export async function askWithVS(prompt, vectorStoreId = OPENAI_VECTOR_STORE) {
