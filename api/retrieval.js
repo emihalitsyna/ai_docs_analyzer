@@ -10,30 +10,36 @@ import {
 
 const client = new OpenAI({ apiKey: OPENAI_API_KEY });
 
+async function ensureVectorStoreId(providedId) {
+  if (providedId) return providedId;
+  const vs = await client.vectorStores.create({ name: 'doc-analyzer-vs' });
+  return vs.id;
+}
+
 export async function uploadFileToVS(filePath, displayName, contentType, vectorStoreId = OPENAI_VECTOR_STORE) {
-  if (!vectorStoreId) throw new Error('OPENAI_VECTOR_STORE is not configured');
+  const vsId = await ensureVectorStoreId(vectorStoreId);
   const file = await client.files.create({ file: await OpenAI.toFile(fs.createReadStream(filePath), displayName, contentType ? { contentType } : undefined), purpose: 'assistants' });
-  const vsFile = await client.vectorStores.files.create(vectorStoreId, { file_id: file.id });
+  const vsFile = await client.vectorStores.files.create(vsId, { file_id: file.id });
   const vsVectorStoreFileId = vsFile.id; // this is the vector store file association id
   // Poll until indexing completed
   let status = 'in_progress';
   let attempts = 0;
   while (status !== 'completed' && attempts < 60) { // ~60s max
     await new Promise((r) => setTimeout(r, 1000));
-    const f = await client.vectorStores.files.retrieve(vectorStoreId, vsVectorStoreFileId);
+    const f = await client.vectorStores.files.retrieve(vsId, vsVectorStoreFileId);
     status = f.status;
     attempts += 1;
   }
-  return vsVectorStoreFileId;
+  return { vectorStoreId: vsId, vectorStoreFileId: vsVectorStoreFileId };
 }
 
-export async function askWithVS(prompt) {
-  if (!OPENAI_VECTOR_STORE) throw new Error('OPENAI_VECTOR_STORE is not configured');
+export async function askWithVS(prompt, vectorStoreId = OPENAI_VECTOR_STORE) {
+  const vsId = await ensureVectorStoreId(vectorStoreId);
 
   // If assistant is provided, use Assistants Threads + Runs
   if (OPENAI_ASSISTANT_ID) {
     const thread = await client.beta.threads.create({
-      tool_resources: { file_search: { vector_store_ids: [OPENAI_VECTOR_STORE] } },
+      tool_resources: { file_search: { vector_store_ids: [vsId] } },
     });
     const threadId = thread?.id;
     if (!threadId) throw new Error('Failed to create thread (no id)');
@@ -50,7 +56,7 @@ export async function askWithVS(prompt) {
     const { data } = await client.beta.threads.messages.list(threadId, { limit: 1, order: 'desc' });
     const last = data[0];
     const text = last?.content?.map((c) => c.text?.value || '').join('\n').trim();
-    return { text, meta: { mode: 'assistants', threadId, runId: run?.id || null, vectorStoreId: OPENAI_VECTOR_STORE } };
+    return { text, meta: { mode: 'assistants', threadId, runId: run?.id || null, vectorStoreId: vsId } };
   }
 
   // Fallback: Responses API with attachments to Vector Store (no assistant needed)
@@ -60,9 +66,9 @@ export async function askWithVS(prompt) {
     temperature: 0.2,
     response_format: { type: 'json_object' },
     attachments: [
-      { file_search: { vector_store_ids: [OPENAI_VECTOR_STORE] } },
+      { file_search: { vector_store_ids: [vsId] } },
     ],
   });
   const text = response.output_text || response.output?.[0]?.content?.map?.((c)=>c.text?.value||'').join('\n') || '';
-  return { text, meta: { mode: 'responses', responseId: response.id, vectorStoreId: OPENAI_VECTOR_STORE } };
+  return { text, meta: { mode: 'responses', responseId: response.id, vectorStoreId: vsId } };
 } 
