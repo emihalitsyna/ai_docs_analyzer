@@ -10,7 +10,7 @@ import {
   CHUNK_OVERLAP,
 } from "../config.js";
 
-const SYSTEM_PROMPT = `Ты эксперт по тендерам и аналитик требований.
+export const SYSTEM_PROMPT = `Ты эксперт по тендерам и аналитик требований.
 Цель: провести детальный, но компактный анализ.
 Ориентируйся на формулировки заказчика.
 Каждое требование формулируй конкретно.
@@ -32,10 +32,8 @@ const SYSTEM_PROMPT = `Ты эксперт по тендерам и аналит
 
 export default async function analyzeDocument(text, originalName) {
   if (OPENAI_VECTOR_STORE) {
-    const prompt = `${SYSTEM_PROMPT}\n\n${text}`;
-    const { text: out, meta } = await askWithVS(prompt);
-    // Pass-through just text; server will still save plain JSON string
-    // but we can append meta for UI if needed
+    // Retrieval-first: we rely on Vector Store + Assistant/Responses file_search
+    const { text: out } = await askWithVS(SYSTEM_PROMPT);
     return out;
   }
   // Heuristic: if text length < 15k chars treat as small
@@ -48,7 +46,7 @@ export default async function analyzeDocument(text, originalName) {
     return jsonStr;
   }
 
-  // Retrieval mode
+  // Retrieval-like classic path for big texts (no VS)
   const chunks = chunkText(text);
   const embeddings = await embedChunks(chunks);
   // For MVP: just take first 10 chunks (could implement similarity search later)

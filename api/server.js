@@ -148,6 +148,26 @@ function buildNotionBlocksFromAnalysis(analysisJsonStr) {
   return blocks;
 }
 
+// Normalize/repair a possibly non-strict JSON string into strict JSON for storage
+function normalizeJsonString(possible) {
+  try {
+    const obj = JSON.parse(possible);
+    return JSON.stringify(obj);
+  } catch {
+    try {
+      let cleaned = String(possible).replace(/^```[a-zA-Z]*[\s\r\n]+/i, "").replace(/```\s*$/i, "").trim();
+      const first = cleaned.indexOf("{");
+      const last = cleaned.lastIndexOf("}");
+      if (first !== -1 && last !== -1) cleaned = cleaned.slice(first, last + 1);
+      cleaned = cleaned.replace(/,\s*([}\]])/g, "$1");
+      const obj = JSON.parse(cleaned);
+      return JSON.stringify(obj);
+    } catch {
+      return String(possible);
+    }
+  }
+}
+
 const app = express();
 app.use(express.json());
 app.use(express.static("public"));
@@ -183,11 +203,24 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
     // Fix filename mojibake (incoming latin1 -> utf8)
     let properName = Buffer.from(originalname, "latin1").toString("utf8");
     
-    const text = await extractText(filePath, mimetype);
-    const analysisJsonStr = await analyzeDocument(text, properName);
+    let analysisJsonStr;
+    let filename;
+
+    if (OPENAI_VECTOR_STORE) {
+      // Retrieval-first: upload file to Vector Store and wait for indexing
+      await uploadFileToVS(filePath, originalname);
+      analysisJsonStr = await analyzeDocument("", properName);
+    } else {
+      // Classic path: extract full text and analyze directly
+      const text = await extractText(filePath, mimetype);
+      analysisJsonStr = await analyzeDocument(text, properName);
+    }
+
+    // Normalize JSON for storage stability
+    analysisJsonStr = normalizeJsonString(analysisJsonStr);
 
     // Save locally
-    const filename = saveAnalysis(analysisJsonStr, originalname);
+    filename = saveAnalysis(analysisJsonStr, originalname);
 
     // Send response to client immediately
     res.json({
@@ -237,11 +270,9 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
       })();
     }
 
-    // 2) Upload original file to Vector Store and then cleanup temp file
+    // 2) Cleanup temp upload file
     if (req.file?.path) {
-      uploadFileToVS(req.file.path, req.file.originalname)
-        .catch(() => {})
-        .finally(() => fs.unlink(req.file.path, () => {}));
+      fs.unlink(req.file.path, () => {});
     }
   } catch (err) {
     console.error(err);

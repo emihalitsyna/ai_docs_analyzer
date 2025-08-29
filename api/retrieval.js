@@ -41,6 +41,8 @@ export async function askWithVS(prompt) {
     const run = await client.beta.threads.runs.createAndPoll(threadId, {
       assistant_id: OPENAI_ASSISTANT_ID,
       tools: [{ type: 'file_search' }],
+      temperature: 0.2,
+      response_format: { type: 'json_object' },
     });
     if (run.status !== 'completed') {
       throw new Error(`Retrieval run not completed: ${run.status} (thread=${threadId}, run=${run?.id || 'unknown'})`);
@@ -55,6 +57,8 @@ export async function askWithVS(prompt) {
   const response = await client.responses.create({
     model: OPENAI_MODEL || 'gpt-4o-mini',
     input: prompt,
+    temperature: 0.2,
+    response_format: { type: 'json_object' },
     attachments: [
       { file_search: { vector_store_ids: [OPENAI_VECTOR_STORE] } },
     ],
