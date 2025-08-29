@@ -10,21 +10,21 @@ import {
 
 const client = new OpenAI({ apiKey: OPENAI_API_KEY });
 
-export async function uploadFileToVS(filePath, displayName, contentType) {
-  if (!OPENAI_VECTOR_STORE) return null;
+export async function uploadFileToVS(filePath, displayName, contentType, vectorStoreId = OPENAI_VECTOR_STORE) {
+  if (!vectorStoreId) throw new Error('OPENAI_VECTOR_STORE is not configured');
   const file = await client.files.create({ file: await OpenAI.toFile(fs.createReadStream(filePath), displayName, contentType ? { contentType } : undefined), purpose: 'assistants' });
-  const vsFile = await client.vectorStores.files.create(OPENAI_VECTOR_STORE, { file_id: file.id });
-  const fileId = file.id;
+  const vsFile = await client.vectorStores.files.create(vectorStoreId, { file_id: file.id });
+  const vsVectorStoreFileId = vsFile.id; // this is the vector store file association id
   // Poll until indexing completed
   let status = 'in_progress';
   let attempts = 0;
   while (status !== 'completed' && attempts < 60) { // ~60s max
     await new Promise((r) => setTimeout(r, 1000));
-    const f = await client.vectorStores.files.retrieve(OPENAI_VECTOR_STORE, fileId);
+    const f = await client.vectorStores.files.retrieve(vectorStoreId, vsVectorStoreFileId);
     status = f.status;
     attempts += 1;
   }
-  return fileId;
+  return vsVectorStoreFileId;
 }
 
 export async function askWithVS(prompt) {
