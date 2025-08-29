@@ -48,6 +48,106 @@ async function ensureNotionSchema(notion) {
   }
 }
 
+// Build human-readable Notion blocks from analysis JSON string
+function buildNotionBlocksFromAnalysis(analysisJsonStr) {
+  const rich = (text) => [{ type: "text", text: { content: String(text) } }];
+  const heading = (text, level = 2) => ({ object: "block", type: `heading_${level}`, [`heading_${level}`]: { rich_text: rich(text) } });
+  const para = (text) => ({ object: "block", type: "paragraph", paragraph: { rich_text: rich(text) } });
+  const bullet = (text, children) => ({ object: "block", type: "bulleted_list_item", bulleted_list_item: { rich_text: rich(text), children } });
+  const numbered = (text, children) => ({ object: "block", type: "numbered_list_item", numbered_list_item: { rich_text: rich(text), children } });
+
+  let data;
+  try {
+    data = JSON.parse(analysisJsonStr);
+  } catch {
+    // Fallback: try to strip code fences and parse first {...}
+    try {
+      let cleaned = analysisJsonStr.replace(/^```[a-zA-Z]*[\s\r\n]+/i, "").replace(/```\s*$/i, "").trim();
+      const first = cleaned.indexOf("{");
+      const last = cleaned.lastIndexOf("}");
+      if (first !== -1 && last !== -1) cleaned = cleaned.slice(first, last + 1);
+      cleaned = cleaned.replace(/,\s*([}\]])/g, "$1");
+      data = JSON.parse(cleaned);
+    } catch {
+      return [heading("Анализ"), para("Не удалось преобразовать результат в структуру. См. исходный JSON ниже."), { object: "block", type: "code", code: { language: "json", rich_text: rich(analysisJsonStr.slice(0, 1900)) } }];
+    }
+  }
+
+  // Normalize keys -> lower_snake
+  const map = {};
+  Object.entries(data).forEach(([k, v]) => {
+    const norm = String(k).toLowerCase().replace(/\s+/g, "_");
+    map[norm] = v;
+  });
+
+  const blocks = [];
+
+  // Заказчик
+  const customer = map["наименование_компании_заказчика"] ?? map["заказчик"];
+  if (customer) {
+    blocks.push(heading("Наименование заказчика", 2));
+    if (Array.isArray(customer)) customer.forEach((it) => blocks.push(bullet(it)));
+    else blocks.push(para(customer));
+  }
+
+  // Технические требования
+  const tech = map["технические_требования"];
+  if (tech && Array.isArray(tech) && tech.length) {
+    blocks.push(heading("1.1. Требования", 2));
+    tech.forEach((t) => blocks.push(bullet(t)));
+  }
+
+  // Ограничения и риски
+  const limits = map["ограничения_и_риски"] ?? map["ограничения"];
+  if (limits && Array.isArray(limits) && limits.length) {
+    blocks.push(heading("1.2. Ограничения", 2));
+    limits.forEach((t) => blocks.push(bullet(t)));
+  }
+
+  // Функциональные / Нефункциональные / Инфраструктурные
+  const sections = [
+    ["Функциональные требования", map["функциональные_требования"]],
+    ["Нефункциональные требования", map["нефункциональные_требования"]],
+    ["Инфраструктурные требования", map["инфраструктурные_требования"]],
+  ];
+  sections.forEach(([title, arr]) => {
+    if (arr && Array.isArray(arr) && arr.length) {
+      blocks.push(heading(title, 2));
+      arr.forEach((t) => blocks.push(bullet(t)));
+    }
+  });
+
+  // Сроки и стоимость
+  const cost = map["сроки_реализации_и_стоимость_проекта"];
+  if (cost) {
+    blocks.push(heading("Сроки реализации и стоимость проекта", 2));
+    if (Array.isArray(cost)) cost.forEach((t) => blocks.push(bullet(t)));
+    else blocks.push(para(cost));
+  }
+
+  // Необходимые документы и поля
+  const docs = map["необходимые_документы_и_поля"];
+  if (docs && Array.isArray(docs) && docs.length) {
+    blocks.push(heading("Типы документов на обработку", 2));
+    docs.forEach((d) => {
+      if (d && typeof d === "object") {
+        const title = d.документ || d.название || d.name || "Документ";
+        const fields = Array.isArray(d.поля || d.fields) ? (d.поля || d.fields) : [];
+        const children = fields.map((f) => bullet(typeof f === "string" ? f : JSON.stringify(f)));
+        blocks.push(numbered(title, children.length ? children : undefined));
+      } else {
+        blocks.push(numbered(String(d)));
+      }
+    });
+  }
+
+  if (!blocks.length) {
+    // Fallback to code block if nothing produced
+    return [{ object: "block", type: "code", code: { language: "json", rich_text: rich(analysisJsonStr.slice(0, 1900)) } }];
+  }
+  return blocks;
+}
+
 const app = express();
 app.use(express.json());
 app.use(express.static("public"));
@@ -113,7 +213,7 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
             for (let i = 0; i < s.length; i += size) out.push(s.slice(i, i + size));
             return out;
           };
-          const chunks = chunkString(analysisJsonStr, 1900);
+          const blocks = buildNotionBlocksFromAnalysis(analysisJsonStr);
           const page = await notion.pages.create({
             parent: { database_id: NOTION_DATABASE_ID },
             properties: {
@@ -122,12 +222,12 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
               "Тип документа": { select: { name: mimetype.includes("pdf") ? "PDF" : "DOCX" } },
               Статус: { select: { name: "Новый" } },
             },
-            children: chunks.map((c) => ({
-              object: "block",
-              type: "code",
-              code: { language: "json", rich_text: [{ type: "text", text: { content: c } }] },
-            })),
+            children: blocks,
           });
+          // Mark as done
+          try {
+            await notion.pages.update({ page_id: page.id, properties: { Статус: { select: { name: "Готово" } } } });
+          } catch {}
           fs.writeFileSync(statusFile, JSON.stringify({ status: "success", pageId: page.id }));
         } catch (notionErr) {
           console.error("Notion export error", notionErr);
