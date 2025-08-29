@@ -170,6 +170,40 @@ app.get("/api/notion-status/:file", async (req, res) => {
   return res.json({ status: "unknown" });
 });
 
+// Diagnostics: check Notion token and database visibility
+app.get("/api/diag/notion", async (req, res) => {
+  try {
+    if (!NOTION_TOKEN) return res.status(400).json({ ok: false, message: "NOTION_TOKEN is missing" });
+    if (!NOTION_DATABASE_ID) return res.status(400).json({ ok: false, message: "NOTION_DATABASE_ID is missing" });
+    const notion = new NotionClient({ auth: NOTION_TOKEN });
+    try {
+      const db = await notion.databases.retrieve({ database_id: NOTION_DATABASE_ID });
+      return res.json({ ok: true, database: { id: db.id, title: db.title?.[0]?.plain_text || null } });
+    } catch (e) {
+      // If specific DB not accessible, list a few visible DBs to help diagnose workspace/permissions
+      let visible = [];
+      try {
+        const found = await notion.search({
+          filter: { value: "database", property: "object" },
+          page_size: 5,
+        });
+        visible = (found.results || []).map((r) => ({ id: r.id, title: r.title?.[0]?.plain_text || null }));
+      } catch {}
+      return res.status(502).json({
+        ok: false,
+        code: e.code,
+        status: e.status,
+        message: e.message,
+        databaseId: NOTION_DATABASE_ID,
+        tokenPrefix: NOTION_TOKEN.slice(0, 7),
+        visibleDatabases: visible,
+      });
+    }
+  } catch (err) {
+    return res.status(500).json({ ok: false, message: err.message });
+  }
+});
+
 export default app;
 
 // For local dev
