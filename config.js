@@ -13,8 +13,8 @@ const getEnv = (key, defaultValue = undefined) => {
 };
 
 export const OPENAI_API_KEY = process.env.OPENAI_API_KEY || null;
-export const OPENAI_MODEL = getEnv("OPENAI_MODEL", "gpt-4o-mini");
-export const OPENAI_MAX_TOKENS = Number(getEnv("OPENAI_MAX_TOKENS", "1000"));
+export const OPENAI_MODEL = getEnv("OPENAI_MODEL", "gpt-5-mini");
+export const OPENAI_MAX_TOKENS = Number(getEnv("OPENAI_MAX_TOKENS", "200000"));
 export const OPENAI_TEMPERATURE = Number(getEnv("OPENAI_TEMPERATURE", "0.7"));
 
 export const NOTION_TOKEN = process.env.NOTION_TOKEN || null;
