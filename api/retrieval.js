@@ -10,9 +10,9 @@ import {
 
 const client = new OpenAI({ apiKey: OPENAI_API_KEY });
 
-export async function uploadFileToVS(filePath, displayName) {
+export async function uploadFileToVS(filePath, displayName, contentType) {
   if (!OPENAI_VECTOR_STORE) return null;
-  const file = await client.files.create({ file: await OpenAI.toFile(fs.createReadStream(filePath), displayName), purpose: 'assistants' });
+  const file = await client.files.create({ file: await OpenAI.toFile(fs.createReadStream(filePath), displayName, contentType ? { contentType } : undefined), purpose: 'assistants' });
   const vsFile = await client.vectorStores.files.create(OPENAI_VECTOR_STORE, { file_id: file.id });
   const vsFileId = vsFile.id || file.id;
   // Poll until indexing completed

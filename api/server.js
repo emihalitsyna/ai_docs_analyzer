@@ -208,7 +208,7 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
 
     if (OPENAI_VECTOR_STORE) {
       // Retrieval-first: upload file to Vector Store and wait for indexing
-      await uploadFileToVS(filePath, originalname);
+      await uploadFileToVS(filePath, properName, mimetype);
       analysisJsonStr = await analyzeDocument("", properName);
     } else {
       // Classic path: extract full text and analyze directly
