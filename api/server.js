@@ -19,6 +19,35 @@ import os from "os";
 const STATUS_DIR = "/tmp/notion_status";
 if (!fs.existsSync(STATUS_DIR)) fs.mkdirSync(STATUS_DIR, { recursive: true });
 
+// Ensure Notion database has required properties
+async function ensureNotionSchema(notion) {
+  // Fetch DB
+  const db = await notion.databases.retrieve({ database_id: NOTION_DATABASE_ID });
+  const props = db.properties || {};
+  const required = [
+    { name: "Дата загрузки", type: "date" },
+    { name: "Тип документа", type: "select", options: ["PDF", "DOCX"] },
+    { name: "Статус", type: "select", options: ["Новый", "Готово", "Ошибка"] },
+  ];
+  const update = { properties: {} };
+  for (const r of required) {
+    if (!props[r.name]) {
+      if (r.type === "date") update.properties[r.name] = { date: {} };
+      if (r.type === "select") update.properties[r.name] = { select: { options: (r.options || []).map((n) => ({ name: n })) } };
+    } else if (r.type === "select") {
+      // merge options if missing
+      const existing = (props[r.name].select?.options || []).map((o) => o.name);
+      const toAdd = (r.options || []).filter((n) => !existing.includes(n));
+      if (toAdd.length) {
+        update.properties[r.name] = { select: { options: [...existing.map((n) => ({ name: n })), ...toAdd.map((n) => ({ name: n }))] } };
+      }
+    }
+  }
+  if (Object.keys(update.properties).length) {
+    await notion.databases.update({ database_id: NOTION_DATABASE_ID, ...update });
+  }
+}
+
 const app = express();
 app.use(express.json());
 app.use(express.static("public"));
@@ -78,6 +107,7 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
           const statusFile = `${STATUS_DIR}/${filename}.json`;
           fs.writeFileSync(statusFile, JSON.stringify({ status: "processing" }));
           const notion = new NotionClient({ auth: NOTION_TOKEN });
+          await ensureNotionSchema(notion);
           const chunkString = (s, size = 1900) => {
             const out = [];
             for (let i = 0; i < s.length; i += size) out.push(s.slice(i, i + size));
@@ -201,6 +231,19 @@ app.get("/api/diag/notion", async (req, res) => {
     }
   } catch (err) {
     return res.status(500).json({ ok: false, message: err.message });
+  }
+});
+
+// Endpoint to trigger schema ensure manually
+app.post("/api/diag/notion-fix", async (req, res) => {
+  try {
+    if (!NOTION_TOKEN || !NOTION_DATABASE_ID) return res.status(400).json({ ok: false, message: "NOTION envs missing" });
+    const notion = new NotionClient({ auth: NOTION_TOKEN });
+    await ensureNotionSchema(notion);
+    const db = await notion.databases.retrieve({ database_id: NOTION_DATABASE_ID });
+    res.json({ ok: true, properties: Object.keys(db.properties) });
+  } catch (e) {
+    res.status(500).json({ ok: false, message: e.message });
   }
 });
 
