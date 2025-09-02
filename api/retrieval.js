@@ -6,6 +6,8 @@ import {
   OPENAI_VECTOR_STORE,
   OPENAI_ASSISTANT_ID,
   OPENAI_MODEL,
+  OPENAI_TEMPERATURE,
+  OPENAI_MAX_TOKENS,
 } from '../config.js';
 
 const client = new OpenAI({ apiKey: OPENAI_API_KEY });
@@ -50,7 +52,8 @@ export async function askWithVS(prompt, vectorStoreId = OPENAI_VECTOR_STORE) {
     const run = await client.beta.threads.runs.createAndPoll(threadId, {
       assistant_id: OPENAI_ASSISTANT_ID,
       tools: [{ type: 'file_search' }],
-      temperature: 0.2,
+      temperature: OPENAI_TEMPERATURE,
+      max_output_tokens: OPENAI_MAX_TOKENS,
       response_format: { type: 'json_object' },
     });
     if (run.status !== 'completed') {
@@ -66,7 +69,8 @@ export async function askWithVS(prompt, vectorStoreId = OPENAI_VECTOR_STORE) {
   const response = await client.responses.create({
     model: OPENAI_MODEL || 'gpt-4o-mini',
     input: prompt,
-    temperature: 0.2,
+    temperature: OPENAI_TEMPERATURE,
+    max_output_tokens: OPENAI_MAX_TOKENS,
     response_format: { type: 'json_object' },
     attachments: [
       { file_search: { vector_store_ids: [vsId] } },
