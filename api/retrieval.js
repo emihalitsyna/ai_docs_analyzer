@@ -11,8 +11,16 @@ import {
 const client = new OpenAI({ apiKey: OPENAI_API_KEY });
 
 async function ensureVectorStoreId(providedId) {
-  if (providedId) return providedId;
-  // Auto-create a Vector Store if none provided
+  if (providedId) {
+    try {
+      // Verify the vector store exists
+      await client.vectorStores.retrieve(providedId);
+      return providedId;
+    } catch (err) {
+      // If not found or invalid, fall through to create a new one
+    }
+  }
+  // Auto-create a Vector Store if none provided or invalid
   const vs = await client.vectorStores.create({ name: 'doc-analyzer-vs' });
   return vs.id;
 }
