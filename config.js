@@ -12,6 +12,16 @@ const getEnv = (key, defaultValue = undefined) => {
   throw new Error(`Required environment variable ${key} is not set`);
 };
 
+// Normalize env strings where providers might set literal strings like "undefined" or "null"
+function normalizeEnvId(value) {
+  if (value === undefined || value === null) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  const lower = trimmed.toLowerCase();
+  if (lower === "undefined" || lower === "null") return null;
+  return trimmed;
+}
+
 export const OPENAI_API_KEY = process.env.OPENAI_API_KEY || null;
 export const OPENAI_MODEL = getEnv("OPENAI_MODEL", "gpt-5-mini");
 export const OPENAI_MAX_TOKENS = Number(getEnv("OPENAI_MAX_TOKENS", "200000"));
@@ -29,8 +39,9 @@ export const CHUNK_OVERLAP = Number(getEnv("CHUNK_OVERLAP", "100"));
 export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 // Retrieval / Assistants API
-export const OPENAI_VECTOR_STORE = process.env.OPENAI_VECTOR_STORE || process.env.OPENAI_VECTOR_STORE_ID || null;
-export const OPENAI_ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID || null;
+const RAW_OPENAI_VECTOR_STORE = normalizeEnvId(process.env.OPENAI_VECTOR_STORE) || normalizeEnvId(process.env.OPENAI_VECTOR_STORE_ID) || null;
+export const OPENAI_VECTOR_STORE = RAW_OPENAI_VECTOR_STORE;
+export const OPENAI_ASSISTANT_ID = normalizeEnvId(process.env.OPENAI_ASSISTANT_ID) || null;
 
 export default {
   OPENAI_API_KEY,

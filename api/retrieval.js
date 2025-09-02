@@ -12,12 +12,16 @@ const client = new OpenAI({ apiKey: OPENAI_API_KEY });
 
 async function ensureVectorStoreId(providedId) {
   if (providedId) return providedId;
+  // Auto-create a Vector Store if none provided
   const vs = await client.vectorStores.create({ name: 'doc-analyzer-vs' });
   return vs.id;
 }
 
 export async function uploadFileToVS(filePath, displayName, contentType, vectorStoreId = OPENAI_VECTOR_STORE) {
   const vsId = await ensureVectorStoreId(vectorStoreId);
+  if (!vsId) {
+    throw new Error('Vector Store ID is not defined and could not be created');
+  }
   const fileForUpload = await OpenAI.toFile(fs.createReadStream(filePath), displayName, contentType ? { contentType } : undefined);
   // Use batch upload with built-in polling
   await client.vectorStores.fileBatches.uploadAndPoll(vsId, { files: [fileForUpload] });
