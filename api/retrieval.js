@@ -53,7 +53,7 @@ export async function askWithVS(prompt, vectorStoreId = OPENAI_VECTOR_STORE) {
       assistant_id: OPENAI_ASSISTANT_ID,
       tools: [{ type: 'file_search' }],
       temperature: OPENAI_TEMPERATURE,
-      max_output_tokens: OPENAI_MAX_TOKENS,
+      max_completion_tokens: OPENAI_MAX_TOKENS,
       response_format: { type: 'json_object' },
     });
     if (run.status !== 'completed') {
