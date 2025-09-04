@@ -211,9 +211,11 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
       // Retrieval-first: upload file to Vector Store and wait for indexing
       const { vectorStoreId } = await uploadFileToVS(filePath, properName, mimetype, OPENAI_VECTOR_STORE);
       usedVectorStoreId = vectorStoreId;
+      console.info(JSON.stringify({ event: 'analysis_path', mode: 'retrieval', assistant: !!OPENAI_ASSISTANT_ID, vectorStoreId, filename: properName, mimetype }));
       analysisJsonStr = await analyzeDocument("", properName);
     } else {
       // Classic path: extract full text and analyze directly
+      console.info(JSON.stringify({ event: 'analysis_path', mode: 'classic', filename: properName, mimetype }));
       const text = await extractText(filePath, mimetype);
       analysisJsonStr = await analyzeDocument(text, properName);
     }
