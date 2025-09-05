@@ -176,9 +176,15 @@ app.use(express.static("public"));
 const UPLOAD_DIR = "/tmp/uploads";
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
+// Configure Multer limits: unlimited if MAX_FILE_SIZE_BYTES <= 0
+const multerLimits = {};
+if (Number(MAX_FILE_SIZE_BYTES) > 0) {
+  multerLimits.fileSize = Number(MAX_FILE_SIZE_BYTES);
+}
+
 const upload = multer({
   dest: UPLOAD_DIR,
-  limits: { fileSize: MAX_FILE_SIZE_BYTES },
+  limits: multerLimits,
   fileFilter: (req, file, cb) => {
     const allowed = [
       "application/pdf",
