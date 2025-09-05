@@ -221,16 +221,6 @@ function buildNotionBlocksFromAnalysis(analysisJsonStr) {
     }
   });
 
-  // Сроки и стоимость
-  blocks.push(heading("Сроки реализации и стоимость проекта", 2));
-  const cost = map["сроки_реализации_и_стоимость_проекта"];
-  if (cost) {
-    if (Array.isArray(cost)) cost.forEach((t) => blocks.push(bullet(t)));
-    else blocks.push(para(cost));
-  } else {
-    blocks.push(para("—"));
-  }
-
   // Необходимые документы и поля
   blocks.push(heading("Типы документов на обработку", 2));
   const docs = map["необходимые_документы_и_поля"];
