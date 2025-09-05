@@ -36,10 +36,10 @@ export const VECTOR_DB_API_KEY = process.env.VECTOR_DB_API_KEY || null;
 export const CHUNK_SIZE = Number(getEnv("CHUNK_SIZE", "1000"));
 export const CHUNK_OVERLAP = Number(getEnv("CHUNK_OVERLAP", "100"));
 
-// Upload size limit (bytes). You can set MAX_FILE_SIZE_BYTES or MAX_FILE_SIZE_MB
+// Upload size limit (bytes). 0 = unlimited (multer). Platform limits may still apply.
 const MAX_FILE_SIZE_MB_ENV = process.env.MAX_FILE_SIZE_MB ? Number(process.env.MAX_FILE_SIZE_MB) : null;
 export const MAX_FILE_SIZE_BYTES = Number(
-  process.env.MAX_FILE_SIZE_BYTES || (MAX_FILE_SIZE_MB_ENV ? String(MAX_FILE_SIZE_MB_ENV * 1024 * 1024) : String(25 * 1024 * 1024))
+  process.env.MAX_FILE_SIZE_BYTES || (MAX_FILE_SIZE_MB_ENV ? String(MAX_FILE_SIZE_MB_ENV * 1024 * 1024) : "0")
 );
 
 // Retrieval / Assistants API
@@ -49,6 +49,9 @@ export const OPENAI_ASSISTANT_ID = normalizeEnvId(process.env.OPENAI_ASSISTANT_I
 
 // Dbrain Knowledge Base
 export const DBRAIN_KB_PATH = process.env.DBRAIN_KB_PATH || "kb/dbrain_capabilities.json";
+
+// Vercel Blob (optional)
+export const BLOB_READ_WRITE_TOKEN = process.env.BLOB_READ_WRITE_TOKEN || null;
 
 export default {
   OPENAI_API_KEY,
@@ -65,4 +68,5 @@ export default {
   OPENAI_VECTOR_STORE,
   OPENAI_ASSISTANT_ID,
   DBRAIN_KB_PATH,
+  BLOB_READ_WRITE_TOKEN,
 }; 
