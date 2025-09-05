@@ -206,12 +206,15 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
     let analysisJsonStr;
     let filename;
     let usedVectorStoreId = OPENAI_VECTOR_STORE;
+    let retrievalFilesSummary = null;
 
     if (OPENAI_VECTOR_STORE) {
       // Retrieval-first: upload file to Vector Store and wait for indexing
-      const { vectorStoreId } = await uploadFileToVS(filePath, properName, mimetype, OPENAI_VECTOR_STORE);
+      const { vectorStoreId, filesSummary } = await uploadFileToVS(filePath, properName, mimetype, OPENAI_VECTOR_STORE);
       usedVectorStoreId = vectorStoreId;
+      retrievalFilesSummary = filesSummary || null;
       console.info(JSON.stringify({ event: 'analysis_path', mode: 'retrieval', assistant: !!OPENAI_ASSISTANT_ID, vectorStoreId, filename: properName, mimetype }));
+      if (filesSummary) console.info(JSON.stringify({ event: 'vector_store_files', vectorStoreId, ...filesSummary }));
       analysisJsonStr = await analyzeDocument("", properName);
     } else {
       // Classic path: extract full text and analyze directly
@@ -233,6 +236,7 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
       notionPageId: null, // set after export
       analysis: analysisJsonStr,
       retrieval: { vectorStore: usedVectorStoreId, assistant: OPENAI_ASSISTANT_ID ? true : false },
+      retrievalFiles: retrievalFilesSummary,
       notion: { queued: !!(NOTION_TOKEN && NOTION_DATABASE_ID) }
     });
 

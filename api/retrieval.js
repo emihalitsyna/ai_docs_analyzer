@@ -34,8 +34,24 @@ export async function uploadFileToVS(filePath, displayName, contentType, vectorS
   }
   const fileForUpload = await OpenAI.toFile(fs.createReadStream(filePath), displayName, contentType ? { contentType } : undefined);
   // Use batch upload with built-in polling
-  await client.vectorStores.fileBatches.uploadAndPoll(vsId, { files: [fileForUpload] });
-  return { vectorStoreId: vsId };
+  const batch = await client.vectorStores.fileBatches.uploadAndPoll(vsId, { files: [fileForUpload] });
+
+  // Build a compact summary to verify indexing readiness
+  let filesSummary = null;
+  try {
+    const list = await client.vectorStores.files.list(vsId);
+    const data = Array.isArray(list?.data) ? list.data : [];
+    filesSummary = {
+      status: batch?.status ?? null,
+      counts: batch?.file_counts ?? batch?.counts ?? null,
+      totalFiles: data.length,
+      fileIds: data.map(f => f.id).slice(0, 20),
+    };
+  } catch {
+    filesSummary = { status: batch?.status ?? null, counts: batch?.file_counts ?? null };
+  }
+
+  return { vectorStoreId: vsId, filesSummary };
 }
 
 export async function askWithVS(prompt, vectorStoreId = OPENAI_VECTOR_STORE) {
