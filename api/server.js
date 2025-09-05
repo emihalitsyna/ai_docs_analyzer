@@ -85,7 +85,7 @@ function buildNotionBlocksFromAnalysis(analysisJsonStr) {
   } catch {
     // Fallback: try to strip code fences and parse first {...}
     try {
-      let cleaned = analysisJsonStr.replace(/^```[a-zA-Z*[\s\r\n]+/i, "").replace(/```\s*$/i, "").trim();
+      let cleaned = analysisJsonStr.replace(/^```[a-zA-Z]*[\s\r\n]+/i, "").replace(/```\s*$/i, "").trim();
       const first = cleaned.indexOf("{");
       const last = cleaned.lastIndexOf("}");
       if (first !== -1 && last !== -1) cleaned = cleaned.slice(first, last + 1);
@@ -260,7 +260,7 @@ function normalizeJsonString(possible) {
     return JSON.stringify(obj);
   } catch {
     try {
-      let cleaned = String(possible).replace(/^```[a-zA-Z*[\s\r\n]+/i, "").replace(/```\s*$/i, "").trim();
+      let cleaned = String(possible).replace(/^```[a-zA-Z]*[\s\r\n]+/i, "").replace(/```\s*$/i, "").trim();
       const first = cleaned.indexOf("{");
       const last = cleaned.lastIndexOf("}");
       if (first !== -1 && last !== -1) cleaned = cleaned.slice(first, last + 1);
