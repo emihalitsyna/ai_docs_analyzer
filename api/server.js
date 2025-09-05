@@ -339,6 +339,49 @@ app.get("/api/notion-status/:file", async (req, res) => {
   return res.json({ status: "unknown" });
 });
 
+// Endpoint to trigger schema ensure manually
+app.post("/api/diag/notion-fix", async (req, res) => {
+  try {
+    if (!NOTION_TOKEN || !NOTION_DATABASE_ID) return res.status(400).json({ ok: false, message: "NOTION envs missing" });
+    const notion = new NotionClient({ auth: NOTION_TOKEN });
+    await ensureNotionSchema(notion);
+    const db = await notion.databases.retrieve({ database_id: NOTION_DATABASE_ID });
+    res.json({ ok: true, properties: Object.keys(db.properties) });
+  } catch (e) {
+    res.status(500).json({ ok: false, message: e.message });
+  }
+});
+
+app.get("/api/notion-fix-names", async (req, res) => {
+  try {
+    if (!NOTION_TOKEN || !NOTION_DATABASE_ID) return res.status(400).json({ error: "Notion is not configured" });
+    const notion = new NotionClient({ auth: NOTION_TOKEN });
+    const isMojibake = (s) => /[ÃÂÐÑ]/.test(s);
+    const decodeLatin1ToUtf8 = (s) => Buffer.from(Buffer.from(String(s), "binary").toString("latin1"), "latin1").toString("utf8");
+
+    const pages = await notion.databases.query({ database_id: NOTION_DATABASE_ID, page_size: 50 });
+    const results = pages.results || [];
+    const updates = [];
+    for (const p of results) {
+      const titleProp = p.properties?.Name?.title || [];
+      const current = titleProp.map(t => t?.plain_text || "").join("");
+      if (current && isMojibake(current)) {
+        const fixed = decodeLatin1ToUtf8(current);
+        try {
+          await notion.pages.update({ page_id: p.id, properties: { Name: { title: [{ text: { content: fixed } }] } } });
+          updates.push({ id: p.id, from: current, to: fixed });
+        } catch (e) {
+          updates.push({ id: p.id, error: e.message });
+        }
+      }
+    }
+    res.json({ success: true, updated: updates.length, updates });
+  } catch (err) {
+    console.error("notion-fix-names error", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Diagnostics: check Notion token and database visibility
 app.get("/api/diag/notion", async (req, res) => {
   try {
