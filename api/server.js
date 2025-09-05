@@ -16,7 +16,8 @@ import { uploadFileToVS } from "./retrieval.js";
 import analyzeDocument, { saveAnalysis } from "./analysis.js";
 import { Client as NotionClient } from "@notionhq/client";
 import os from "os";
-import { BLOB_READ_WRITE_TOKEN } from "../config.js";
+import cfgAll from "../config.js";
+const { BLOB_READ_WRITE_TOKEN } = cfgAll;
 const STATUS_DIR = "/tmp/notion_status";
 if (!fs.existsSync(STATUS_DIR)) fs.mkdirSync(STATUS_DIR, { recursive: true });
 
