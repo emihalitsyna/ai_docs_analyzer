@@ -24,8 +24,8 @@ function normalizeEnvId(value) {
 
 export const OPENAI_API_KEY = process.env.OPENAI_API_KEY || null;
 export const OPENAI_MODEL = getEnv("OPENAI_MODEL", "gpt-5-mini");
-export const OPENAI_MAX_TOKENS = Number(getEnv("OPENAI_MAX_TOKENS", "200000"));
-export const OPENAI_TEMPERATURE = Number(getEnv("OPENAI_TEMPERATURE", "0.7"));
+export const OPENAI_MAX_TOKENS = Number(getEnv("OPENAI_MAX_TOKENS", "20000"));
+export const OPENAI_TEMPERATURE = Number(getEnv("OPENAI_TEMPERATURE", "0.2"));
 
 export const NOTION_TOKEN = process.env.NOTION_TOKEN || null;
 export const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID || null;
@@ -36,7 +36,11 @@ export const VECTOR_DB_API_KEY = process.env.VECTOR_DB_API_KEY || null;
 export const CHUNK_SIZE = Number(getEnv("CHUNK_SIZE", "1000"));
 export const CHUNK_OVERLAP = Number(getEnv("CHUNK_OVERLAP", "100"));
 
-export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+// Upload size limit (bytes). You can set MAX_FILE_SIZE_BYTES or MAX_FILE_SIZE_MB
+const MAX_FILE_SIZE_MB_ENV = process.env.MAX_FILE_SIZE_MB ? Number(process.env.MAX_FILE_SIZE_MB) : null;
+export const MAX_FILE_SIZE_BYTES = Number(
+  process.env.MAX_FILE_SIZE_BYTES || (MAX_FILE_SIZE_MB_ENV ? String(MAX_FILE_SIZE_MB_ENV * 1024 * 1024) : String(25 * 1024 * 1024))
+);
 
 // Retrieval / Assistants API
 const RAW_OPENAI_VECTOR_STORE = normalizeEnvId(process.env.OPENAI_VECTOR_STORE) || normalizeEnvId(process.env.OPENAI_VECTOR_STORE_ID) || null;

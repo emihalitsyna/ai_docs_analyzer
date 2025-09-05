@@ -353,6 +353,8 @@
           payload = await res.clone().json();
         } catch {
           const text = await res.text();
+          if(res.status===413){ showToast('Файл слишком большой. Уменьшите размер или сожмите.'); endProgress(); return; }
+          if(res.status===400){ showToast('Неверный тип файла. Разрешены PDF или DOCX.'); endProgress(); return; }
           showToast('Ошибка: ' + (text?.slice(0, 200) || 'unknown'));
           endProgress();
           return;
