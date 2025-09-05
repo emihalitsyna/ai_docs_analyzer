@@ -135,12 +135,7 @@ function reduceAnalyses(partials) {
 
 export default async function analyzeDocument(text, originalName) {
   const PROMPT = buildPromptWithKB(SYSTEM_PROMPT);
-  if (OPENAI_VECTOR_STORE) {
-    // Retrieval-first: we rely on Vector Store + Assistant/Responses file_search
-    const { text: out } = await askWithVS(PROMPT);
-    return out;
-  }
-  // Heuristic: if text length < 15k chars treat as small
+  // Всегда анализируем исходный текст; Retrieval не используем для финального анализа
   if (text.length < 15000) {
     const messages = [
       { role: "system", content: PROMPT },
@@ -152,8 +147,7 @@ export default async function analyzeDocument(text, originalName) {
 
   // Full-document map-reduce across all chunks (no Vector Store)
   const chunks = chunkText(text);
-  const MAX_CHUNKS = 120; // защитный предел
-  const usedChunks = chunks.slice(0, MAX_CHUNKS);
+  const usedChunks = chunks; // анализируем все чанки
 
   const partials = [];
   for (let i = 0; i < usedChunks.length; i++) {
@@ -170,7 +164,6 @@ export default async function analyzeDocument(text, originalName) {
   }
 
   const reduced = reduceAnalyses(partials);
-  // Финальный выравнивающий проход: попросим модель привести в аккуратный вид (опционально)
   try {
     const messages = [
       { role: "system", content: PROMPT },
