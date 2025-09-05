@@ -73,7 +73,7 @@ async function ensureNotionSchema(notion) {
     { name: "Тип документа", type: "select", options: ["PDF", "DOCX"] },
     { name: "Статус", type: "select", options: ["Новый", "Готово", "Ошибка"] },
     { name: "Описание", type: "rich_text" },
-    { name: "Ссылка на ТЗ", type: "url" },
+    { name: "Ссылки и файлы", type: "files" },
     { name: "Контакты", type: "rich_text" },
     { name: "Доработки", type: "rich_text" },
     { name: "Сопоставление с Dbrain", type: "rich_text" },
@@ -85,6 +85,7 @@ async function ensureNotionSchema(notion) {
       if (r.type === "select") update.properties[r.name] = { select: { options: (r.options || []).map((n) => ({ name: n })) } };
       if (r.type === "url") update.properties[r.name] = { url: {} };
       if (r.type === "rich_text") update.properties[r.name] = { rich_text: {} };
+      if (r.type === "files") update.properties[r.name] = { files: {} };
     } else if (r.type === "select") {
       // merge options if missing
       const existing = (props[r.name].select?.options || []).map((o) => o.name);
@@ -149,8 +150,8 @@ function buildNotionBlocksFromAnalysis(analysisJsonStr) {
   const descr = map["описание_документа"];
   blocks.push(para(descr ? (typeof descr === "string" ? descr : JSON.stringify(descr)) : "—"));
 
-  // Ссылка на оригинальное ТЗ
-  blocks.push(heading("Ссылка на оригинальное ТЗ", 2));
+  // Ссылки и файлы
+  blocks.push(heading("Ссылки и файлы", 2));
   const tzUrl = typeof map["ссылка_на_оригинальное_тз"] === "string" ? map["ссылка_на_оригинальное_тз"] : null;
   blocks.push(tzUrl ? paraLink(tzUrl, tzUrl) : para("—"));
 
@@ -429,7 +430,7 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
             Статус: { select: { name: "Новый" } },
           };
           if (descrProp) pageProps["Описание"] = { rich_text: [{ text: { content: String(descrProp).slice(0, 1900) } }] };
-          if (finalLink) pageProps["Ссылка на ТЗ"] = { url: finalLink };
+          if (finalLink) pageProps["Ссылки и файлы"] = { files: [ { name: properName, external: { url: finalLink } } ] };
 
           // Build content blocks with summary at top
           const blocks = buildNotionBlocksFromAnalysis(analysisJsonStr);
