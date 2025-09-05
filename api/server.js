@@ -414,8 +414,16 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
           // Build content blocks with summary at top
           const blocks = buildNotionBlocksFromAnalysis(analysisJsonStr);
 
-          // Create page
-          const page = await notion.pages.create({ parent: { database_id: NOTION_DATABASE_ID }, properties: pageProps, children: blocks });
+          // Create page with first portion of blocks (avoid 100-block limit)
+          const first = blocks.slice(0, 50);
+          const rest = blocks.slice(50);
+          const page = await notion.pages.create({ parent: { database_id: NOTION_DATABASE_ID }, properties: pageProps, children: first });
+
+          // Append remaining blocks in batches of 90
+          for (let i = 0; i < rest.length; i += 90) {
+            const slice = rest.slice(i, i + 90);
+            try { await notion.blocks.children.append({ block_id: page.id, children: slice }); } catch (e) { console.warn('notion_append_failed', e?.message); }
+          }
 
           // Attach original file if present
           if (originalUrl) {
