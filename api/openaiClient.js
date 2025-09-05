@@ -24,13 +24,16 @@ export async function embedChunks(chunks) {
 
 export async function chatCompletion(messages) {
   if (!openai) throw new Error("OPENAI_API_KEY not configured");
-  const completion = await openai.chat.completions.create({
+  const input = messages.map((m) => `${m.role.toUpperCase()}: ${m.content}`).join("\n\n");
+  const response = await openai.responses.create({
     model: OPENAI_MODEL,
+    input,
     temperature: OPENAI_TEMPERATURE,
-    max_tokens: OPENAI_MAX_TOKENS,
-    messages,
+    max_output_tokens: OPENAI_MAX_TOKENS,
+    response_format: { type: "json_object" },
   });
-  return completion.choices[0].message.content;
+  const text = response.output_text || response.output?.map?.(p=>p?.content?.map?.(c=>c?.text?.value||"").join("")).join("\n");
+  return text || "{}";
 }
 
 export default openai; 
