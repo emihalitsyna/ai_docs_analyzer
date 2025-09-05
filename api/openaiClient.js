@@ -30,7 +30,6 @@ export async function chatCompletion(messages) {
     input,
     temperature: OPENAI_TEMPERATURE,
     max_output_tokens: OPENAI_MAX_TOKENS,
-    text: { format: "json_object" },
   });
   const text = response.output_text || response.output?.map?.(p=>p?.content?.map?.(c=>c?.text?.value||"").join("")).join("\n");
   return text || "{}";
