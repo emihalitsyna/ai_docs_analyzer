@@ -326,6 +326,10 @@ app.get("/api/status", (req, res) => {
     openai: OPENAI_API_KEY ? "connected" : "disconnected",
     notion: NOTION_TOKEN && NOTION_DATABASE_ID ? "connected" : "disconnected",
     timestamp: new Date().toISOString(),
+    version: {
+      commit: process.env.VERCEL_GIT_COMMIT_SHA || null,
+      url: process.env.VERCEL_URL || null,
+    }
   });
 });
 
