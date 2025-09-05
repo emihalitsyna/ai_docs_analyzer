@@ -4,7 +4,7 @@ import path from "path";
 import chunkText from "./chunker.js";
 import { embedChunks, chatCompletion } from "./openaiClient.js";
 import { askWithVS } from "./retrieval.js";
-import { OPENAI_VECTOR_STORE } from "../config.js";
+import { OPENAI_VECTOR_STORE, DBRAIN_KB_PATH } from "../config.js";
 import {
   CHUNK_SIZE,
   CHUNK_OVERLAP,
@@ -50,16 +50,35 @@ export const SYSTEM_PROMPT = `Ты эксперт по тендерам и ан�
 - Не выдумывай контакты/URL/стоимость/сроки/соответствие Dbrain — оставляй пусто, если нет в тексте.
 - Если знаний о возможностях Dbrain не предоставлено во входных данных — разделы "требуемые_доработки" и "сопоставление_с_dbrain" формируй только из формулировок документа (без предположений).`;
 
+function readDbrainKB() {
+  try {
+    if (DBRAIN_KB_PATH && fs.existsSync(DBRAIN_KB_PATH)) {
+      const raw = fs.readFileSync(DBRAIN_KB_PATH, 'utf-8');
+      const json = JSON.parse(raw);
+      return json;
+    }
+  } catch {}
+  return null;
+}
+
+function buildPromptWithKB(basePrompt) {
+  const kb = readDbrainKB();
+  if (!kb) return basePrompt;
+  const kbText = JSON.stringify(kb);
+  return `${basePrompt}\n\nКонтекст о возможностях Dbrain (используй только для сопоставления, не выдумывай факты):\n${kbText}`;
+}
+
 export default async function analyzeDocument(text, originalName) {
+  const PROMPT = buildPromptWithKB(SYSTEM_PROMPT);
   if (OPENAI_VECTOR_STORE) {
     // Retrieval-first: we rely on Vector Store + Assistant/Responses file_search
-    const { text: out } = await askWithVS(SYSTEM_PROMPT);
+    const { text: out } = await askWithVS(PROMPT);
     return out;
   }
   // Heuristic: if text length < 15k chars treat as small
   if (text.length < 15000) {
     const messages = [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: PROMPT },
       { role: "user", content: text },
     ];
     const jsonStr = await chatCompletion(messages);
@@ -72,7 +91,7 @@ export default async function analyzeDocument(text, originalName) {
   // For MVP: just take first 10 chunks (could implement similarity search later)
   const selectedChunks = chunks.slice(0, 10);
   const messages = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: PROMPT },
     { role: "user", content: selectedChunks.join("\n\n") },
   ];
   const jsonStr = await chatCompletion(messages);

@@ -47,6 +47,9 @@ const RAW_OPENAI_VECTOR_STORE = normalizeEnvId(process.env.OPENAI_VECTOR_STORE) 
 export const OPENAI_VECTOR_STORE = RAW_OPENAI_VECTOR_STORE;
 export const OPENAI_ASSISTANT_ID = normalizeEnvId(process.env.OPENAI_ASSISTANT_ID) || null;
 
+// Dbrain Knowledge Base
+export const DBRAIN_KB_PATH = process.env.DBRAIN_KB_PATH || "kb/dbrain_capabilities.json";
+
 export default {
   OPENAI_API_KEY,
   OPENAI_MODEL,
@@ -61,4 +64,5 @@ export default {
   MAX_FILE_SIZE_BYTES,
   OPENAI_VECTOR_STORE,
   OPENAI_ASSISTANT_ID,
+  DBRAIN_KB_PATH,
 }; 
