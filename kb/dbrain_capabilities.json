@@ -1,40 +1,79 @@
 {
   "product": "Dbrain",
-  "version": "MVP",
-  "capabilities": [
+  "docs_url": "https://docs.dbrain.io/",
+  "services": [
     {
-      "category": "Ввод данных",
-      "items": [
-        "Загрузка PDF и DOCX",
-        "Извлечение текста из документов",
-        "Поддержка кириллицы"
+      "name": "Классификация документов",
+      "description": "Сортировка документов по типу"
+    },
+    {
+      "name": "Извлечение данных",
+      "description": "Извлечение структурированных данных из изображений документов",
+      "types": [
+        "Паспорт",
+        "Паспорт: прописка",
+        "Водительское удостоверение",
+        "СТС",
+        "Бухгалтерская первичка",
+        "Договоры",
+        "Прочие документы"
       ]
     },
     {
-      "category": "Поиск и анализ",
-      "items": [
-        "Векторный поиск по содержимому",
-        "Распознавание секций требований",
-        "Экспорт структурированного анализа"
+      "name": "Проверка документов",
+      "description": "Проверка на подделку, качество и наличие подписей/печате, проверки по базам",
+      "types": [
+        "Антифрод",
+        "Антифрод 2.0",
+        "Подписи и печати",
+        "Базы данных"
       ]
     },
     {
-      "category": "Интеграции",
-      "items": [
-        "Экспорт в Notion",
-        "Интеграция с OpenAI Assistants/Vector Store"
+      "name": "Операции с лицами",
+      "types": [
+        "Сравнение лиц",
+        "Селфи-чек",
+        "Liveness"
       ]
     },
-    {
-      "category": "Безопасность и инфраструктура",
-      "items": [
-        "Ограничение размера загрузки",
-        "Очистка временных файлов"
-      ]
-    }
+    { "name": "Базовый OCR" },
+    { "name": "Ручная верификация" }
   ],
-  "constraints": [
-    "Нет встроенной поддержки сканов (OCR)",
-    "Хранение анализов локально временно (MVP)"
+  "formats": {
+    "single_page": ["JPEG", "JPG", "PNG", "TIFF", "BMP", "GIF", "HEIC", "HEIF", "PDF", "DJVU"],
+    "multi_page": ["PDF", "DJVU"],
+    "max_file_mb": 30,
+    "min_file_kb": 1
+  },
+  "api": {
+    "request_format": "multipart/form-data",
+    "response_encoding": "UTF-8",
+    "async": {
+      "param": "async",
+      "default": false,
+      "result_endpoint_pattern": "GET https://latest.dbrain.io/result/{task_id}?token=...",
+      "poll_recommended_seconds": 1
+    },
+    "task_tags": true,
+    "healthcheck": "https://latest.dbrain.io/healthcheck"
+  },
+  "http_statuses": [
+    "200 OK",
+    "202 Accepted",
+    "403 License is Invalid",
+    "404 Not Found",
+    "405 Method Not Allowed",
+    "413 Content Too Large",
+    "415 Unsupported Media Type",
+    "422 Unprocessable Content",
+    "500 Internal Server Error",
+    "502 Bad Gateway",
+    "503 Service Unavailable"
+  ],
+  "notes": [
+    "Сервисы принимают двоичные изображения в теле запроса",
+    "Поддерживаются теги запросов task_tags",
+    "Асинхронный режим возвращает task_id и требует опроса метода result"
   ]
 } 
