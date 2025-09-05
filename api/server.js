@@ -258,7 +258,7 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
           const page = await notion.pages.create({
             parent: { database_id: NOTION_DATABASE_ID },
             properties: {
-              Name: { title: [{ text: { content: originalname } }] },
+              Name: { title: [{ text: { content: properName } }] },
               "Дата загрузки": { date: { start: new Date().toISOString() } },
               "Тип документа": { select: { name: mimetype.includes("pdf") ? "PDF" : "DOCX" } },
               Статус: { select: { name: "Новый" } },
