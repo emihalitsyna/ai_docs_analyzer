@@ -109,12 +109,10 @@ function buildNotionBlocksFromAnalysis(analysisJsonStr) {
   const paraLink = (text, url) => ({ object: "block", type: "paragraph", paragraph: { rich_text: richLink(text, url) } });
   const bullet = (text, children) => ({ object: "block", type: "bulleted_list_item", bulleted_list_item: { rich_text: rich(text), children } });
   const numbered = (text, children) => ({ object: "block", type: "numbered_list_item", numbered_list_item: { rich_text: rich(text), children } });
-  const callout = (text) => ({ object: "block", type: "callout", callout: { icon: { type: 'emoji', emoji: '📝' }, rich_text: rich(String(text).slice(0, 2000)) } });
 
   let data;
-  try {
-    data = JSON.parse(analysisJsonStr);
-  } catch {
+  try { data = JSON.parse(analysisJsonStr); }
+  catch {
     try {
       let cleaned = analysisJsonStr.replace(/^```[a-zA-Z]*[\s\r\n]+/i, "").replace(/```\s*$/i, "").trim();
       const first = cleaned.indexOf("{");
@@ -123,149 +121,82 @@ function buildNotionBlocksFromAnalysis(analysisJsonStr) {
       cleaned = cleaned.replace(/,\s*([}\]])/g, "$1");
       data = JSON.parse(cleaned);
     } catch {
-      return [heading("Анализ"), para("Не удалось преобразовать результат в структуру. См. исходный JSON ниже."), { object: "block", type: "code", code: { language: "json", rich_text: rich(analysisJsonStr.slice(0, 1900)) } }];
+      return [heading("Анализ"), para("Не удалось преобразовать результат в структуру."), { object: "block", type: "code", code: { language: "json", rich_text: rich(analysisJsonStr.slice(0, 1900)) } }];
     }
   }
 
-  const map = {};
-  Object.entries(data).forEach(([k, v]) => {
-    const norm = String(k).toLowerCase().replace(/\s+/g, "_");
-    map[norm] = v;
-  });
-
+  const map = {}; Object.entries(data).forEach(([k,v])=>{ map[String(k).toLowerCase().replace(/\s+/g,'_')] = v; });
   const blocks = [];
 
-  // Summary callout
-  const pickText = (arr) => Array.isArray(arr) ? arr.slice(0, 4).map((t) => (t && typeof t === 'object') ? (t.описание || '') : String(t)).filter(Boolean).join('; ') : '';
-  const summaryText = [
-    pickText(map["технические_требования"]),
-    pickText(map["функциональные_требования"]),
-    pickText(map["нефункциональные_требования"]),
-    pickText(map["инфраструктурные_требования"])
-  ].filter(Boolean).join('; ');
-  blocks.push(callout(summaryText ? `Ключевые требования: ${summaryText}` : 'Ключевые требования: —'));
+  // Описание
+  blocks.push(heading("Описание", 2));
+  const descr = map['описание_документа'];
+  blocks.push(para(descr ? (typeof descr==='string'?descr:JSON.stringify(descr)) : '—'));
 
-  // Описание документа
-  blocks.push(heading("Описание документа", 2));
-  const descr = map["описание_документа"];
-  blocks.push(para(descr ? (typeof descr === "string" ? descr : JSON.stringify(descr)) : "—"));
-
-  // Ссылки и файлы
-  blocks.push(heading("Ссылки и файлы", 2));
-  const tzUrl = typeof map["ссылка_на_оригинальное_тз"] === "string" ? map["ссылка_на_оригинальное_тз"] : null;
-  blocks.push(tzUrl ? paraLink(tzUrl, tzUrl) : para("—"));
-
-  // Контактные лица
-  blocks.push(heading("Контактные лица", 2));
-  const contacts = map["контактные_лица"];
-  if (Array.isArray(contacts) && contacts.length) {
-    contacts.forEach((c) => {
-      if (c && typeof c === "object") {
-        const line = [c.фио, c.роль, c.email, c.телефон].filter(Boolean).join(" — ");
-        blocks.push(bullet(line || JSON.stringify(c)));
-      } else blocks.push(bullet(String(c)));
-    });
-  } else {
-    blocks.push(para("—"));
-  }
-
-
-  // Технические требования
-  blocks.push(heading("1.1. Требования", 2));
-  const tech = map["технические_требования"];
-  if (Array.isArray(tech) && tech.length) {
-    tech.forEach((t) => {
-      if (t && typeof t === "object") {
-        const line = t.описание || JSON.stringify(t);
-        const children = t.цитата ? [para(`«${t.цитата}»`)] : undefined;
-        blocks.push(bullet(line, children));
-      } else blocks.push(bullet(String(t)));
-    });
-  } else {
-    blocks.push(para("—"));
-  }
-
-  // Ограничения и риски
-  blocks.push(heading("1.2. Ограничения", 2));
-  const limits = map["ограничения_и_риски"] ?? map["ограничения"];
-  if (Array.isArray(limits) && limits.length) {
-    limits.forEach((t) => {
-      if (t && typeof t === "object") {
-        const line = t.описание || JSON.stringify(t);
-        const children = t.цитата ? [para(`«${t.цитата}»`)] : undefined;
-        blocks.push(bullet(line, children));
-      } else blocks.push(bullet(String(t)));
-    });
-  } else {
-    blocks.push(para("—"));
-  }
-
-  // Функциональные / Нефункциональные / Инфраструктурные
-  const sections = [
-    ["Функциональные требования", map["функциональные_требования"]],
-    ["Нефункциональные требования", map["нефункциональные_требования"]],
-    ["Инфраструктурные требования", map["инфраструктурные_требования"]],
+  // Вложенный блок требований (как подзаголовки)
+  const reqSections = [
+    ['Технические требования', map['технические_требования']],
+    ['Функциональные требования', map['функциональные_требования']],
+    ['Нефункциональные требования', map['нефункциональные_требования']],
+    ['Инфраструктурные требования', map['инфраструктурные_требования']],
+    ['Ограничения и риски', map['ограничения_и_риски']],
   ];
-  sections.forEach(([title, arr]) => {
-    blocks.push(heading(title, 2));
-    if (Array.isArray(arr) && arr.length) {
-      arr.forEach((t) => {
-        if (t && typeof t === "object") {
-          const line = t.описание || JSON.stringify(t);
-          const children = t.цитата ? [para(`«${t.цитата}»`)] : undefined;
+  reqSections.forEach(([title, arr])=>{
+    blocks.push(heading(title,3));
+    if(Array.isArray(arr) && arr.length){
+      arr.forEach((t)=>{
+        if(t && typeof t==='object'){
+          const line=t.описание||JSON.stringify(t);
+          const children=t.цитата?[para(`«${t.цитата}»`)]:undefined;
           blocks.push(bullet(line, children));
         } else blocks.push(bullet(String(t)));
       });
-    } else {
-      blocks.push(para("—"));
-    }
+    } else { blocks.push(para('—')); }
   });
 
-  // Необходимые документы и поля
-  blocks.push(heading("Типы документов на обработку", 2));
-  const docs = map["необходимые_документы_и_поля"];
+  // Типы документов на обработку
+  blocks.push(heading("Типы документов на обработку",2));
+  const docs = map['необходимые_документы_и_поля'];
   if (Array.isArray(docs) && docs.length) {
-    docs.forEach((d) => {
-      if (d && typeof d === "object") {
-        const title = d.документ || d.название || d.name || "Документ";
-        const fields = Array.isArray(d.поля || d.fields) ? (d.поля || d.fields) : [];
-        const children = fields.map((f) => bullet(typeof f === "string" ? f : JSON.stringify(f)));
-        blocks.push(numbered(title, children.length ? children : undefined));
+    docs.forEach((d)=>{
+      if (d && typeof d==='object'){
+        const title=d.документ||d.название||d.name||'Документ';
+        const fields=Array.isArray(d.поля||d.fields)?(d.поля||d.fields):[];
+        const children=fields.map((f)=>bullet(typeof f==='string'?f:JSON.stringify(f)));
+        blocks.push(numbered(title, children.length?children:undefined));
       } else blocks.push(numbered(String(d)));
     });
-  } else {
-    blocks.push(para("—"));
-  }
+  } else { blocks.push(para('—')); }
 
-  // Требуемые доработки
-  blocks.push(heading("Требуемые доработки", 2));
-  const upgrades = map["требуемые_доработки"];
-  if (Array.isArray(upgrades) && upgrades.length) {
-    upgrades.forEach((u) => {
-      if (u && typeof u === "object") {
-        const main = [u.описание, u.приоритет, u.оценка_сложности].filter(Boolean).join(" — ");
-        const children = u.цитата ? [para(`«${u.цитата}»`)] : undefined;
-        blocks.push(bullet(main || JSON.stringify(u), children));
+  // Список необходимых доработок
+  blocks.push(heading("Список необходимых доработок",2));
+  const upgrades = map['требуемые_доработки'];
+  if (Array.isArray(upgrades) && upgrades.length){
+    upgrades.forEach((u)=>{
+      if(u && typeof u==='object'){
+        const main=[u.описание,u.приоритет,u.оценка_сложности].filter(Boolean).join(' — ');
+        const children=u.цитата?[para(`«${u.цитата}»`)]:undefined;
+        blocks.push(bullet(main||JSON.stringify(u),children));
       } else blocks.push(bullet(String(u)));
     });
-  } else {
-    blocks.push(para("—"));
-  }
+  } else { blocks.push(para('—')); }
 
-  // Сопоставление с Dbrain
-  blocks.push(heading("Сопоставление с Dbrain", 2));
-  const mapping = map["сопоставление_с_dbrain"];
-  if (Array.isArray(mapping) && mapping.length) {
-    mapping.forEach((m) => {
-      if (m && typeof m === "object") {
-        const main = [m.требование, m.статус, m.комментарий].filter(Boolean).join(" — ");
-        const children = m.цитата ? [para(`«${m.цитата}»`)] : undefined;
-        blocks.push(bullet(main || JSON.stringify(m), children));
-      } else blocks.push(bullet(String(m)));
+  // Контакты
+  blocks.push(heading("Контактные лица, способ связи",2));
+  const contacts = map['контактные_лица'];
+  if(Array.isArray(contacts) && contacts.length){
+    contacts.forEach((c)=>{
+      if(c && typeof c==='object'){
+        const line=[c.фио,c.роль,c.email,c.телефон].filter(Boolean).join(' — ');
+        blocks.push(bullet(line||JSON.stringify(c)));
+      } else blocks.push(bullet(String(c)));
     });
-  } else {
-    blocks.push(para("—"));
-  }
+  } else { blocks.push(para('—')); }
+
+  // Ссылки и файлы (в контенте URL; вложение кладём в свойства отдельно)
+  blocks.push(heading("Ссылки и файлы",2));
+  const tzUrl = typeof map['ссылка_на_оригинальное_тз']==='string'? map['ссылка_на_оригинальное_тз']:null;
+  blocks.push(tzUrl ? paraLink(tzUrl, tzUrl) : para('—'));
 
   return blocks;
 }
