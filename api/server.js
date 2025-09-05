@@ -79,6 +79,7 @@ function buildNotionBlocksFromAnalysis(analysisJsonStr) {
   const paraLink = (text, url) => ({ object: "block", type: "paragraph", paragraph: { rich_text: richLink(text, url) } });
   const bullet = (text, children) => ({ object: "block", type: "bulleted_list_item", bulleted_list_item: { rich_text: rich(text), children } });
   const numbered = (text, children) => ({ object: "block", type: "numbered_list_item", numbered_list_item: { rich_text: rich(text), children } });
+  const callout = (text) => ({ object: "block", type: "callout", callout: { icon: { type: 'emoji', emoji: '📝' }, rich_text: rich(String(text).slice(0, 2000)) } });
 
   let data;
   try {
@@ -105,6 +106,15 @@ function buildNotionBlocksFromAnalysis(analysisJsonStr) {
   });
 
   const blocks = [];
+
+  // Короткий summary из требований (в callout)
+  const tech = map["технические_требования"];
+  const func = map["функциональные_требования"];
+  const nonf = map["нефункциональные_требования"];
+  const infra = map["инфраструктурные_требования"];
+  const pickText = (arr) => Array.isArray(arr) ? arr.slice(0,4).map((t)=> typeof t==='object' ? (t.описание||'') : String(t)).filter(Boolean).join("; ") : "";
+  const summaryText = [pickText(tech), pickText(func), pickText(nonf), pickText(infra)].filter(Boolean).join("; ");
+  if (summaryText) blocks.push(callout(`Ключевые требования: ${summaryText}`));
 
   // Описание документа
   const descr = map["описание_документа"];
@@ -143,10 +153,10 @@ function buildNotionBlocksFromAnalysis(analysisJsonStr) {
   }
 
   // Технические требования
-  const tech = map["технические_требования"];
-  if (tech && Array.isArray(tech) && tech.length) {
+  const techReqs = map["технические_требования"];
+  if (techReqs && Array.isArray(techReqs) && techReqs.length) {
     blocks.push(heading("1.1. Требования", 2));
-    tech.forEach((t) => {
+    techReqs.forEach((t) => {
       if (t && typeof t === "object") {
         const line = t.описание || JSON.stringify(t);
         const children = t.цитата ? [para(`«${t.цитата}»`)] : undefined;
@@ -349,17 +359,15 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
       analysisJsonStr = await analyzeDocument(text, properName);
     }
 
+    // Prepare parsed map
+    let parsed = {};
+    try { parsed = JSON.parse(analysisJsonStr); } catch {}
+    const norm = {}; Object.entries(parsed || {}).forEach(([k, v]) => { norm[String(k).toLowerCase().replace(/\s+/g, "_")] = v; });
+
     // If Blob URL is available, inject it when link field is empty/missing
     if (originalUrl) {
-      try {
-        const obj = JSON.parse(analysisJsonStr);
-        const hasSnake = typeof obj['ссылка_на_оригинальное_тз'] === 'string' && obj['ссылка_на_оригинальное_тз'];
-        const hasSpaced = typeof obj['ссылка на оригинальное тз'] === 'string' && obj['ссылка на оригинальное тз'];
-        if (!hasSnake && !hasSpaced) {
-          obj['ссылка_на_оригинальное_тз'] = originalUrl;
-          analysisJsonStr = JSON.stringify(obj);
-        }
-      } catch {}
+      const linkSnake = typeof norm['ссылка_на_оригинальное_тз'] === 'string' ? norm['ссылка_на_оригинальное_тз'] : '';
+      if (!linkSnake) { norm['ссылка_на_оригинальное_тз'] = originalUrl; analysisJsonStr = JSON.stringify({ ...parsed, 'ссылка_на_оригинальное_тз': originalUrl }); }
     }
 
     // Normalize JSON for storage stability
@@ -368,20 +376,10 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
     // Save locally
     filename = saveAnalysis(analysisJsonStr, originalname);
 
-    // Send response to client immediately
-    res.json({
-      success: true,
-      filename,
-      notionPageId: null, // set after export
-      analysis: analysisJsonStr,
-      retrieval: { vectorStore: usedVectorStoreId, assistant: OPENAI_ASSISTANT_ID ? true : false },
-      retrievalFiles: retrievalFilesSummary,
-      notion: { queued: !!(NOTION_TOKEN && NOTION_DATABASE_ID) },
-      upload: { blob: !!originalUrl, url: originalUrl }
-    });
+    // Respond
+    res.json({ success: true, filename, notionPageId: null, analysis: analysisJsonStr, retrieval: { vectorStore: usedVectorStoreId, assistant: OPENAI_ASSISTANT_ID ? true : false }, retrievalFiles: retrievalFilesSummary, notion: { queued: !!(NOTION_TOKEN && NOTION_DATABASE_ID) }, upload: { blob: !!originalUrl, url: originalUrl } });
 
-    // ---- Background side-effects (fire-and-forget) ----
-    // 1) Notion export (chunked to avoid 2k limit per block)
+    // Background Notion export
     if (NOTION_TOKEN && NOTION_DATABASE_ID) {
       (async () => {
         try {
@@ -389,54 +387,45 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
           fs.writeFileSync(statusFile, JSON.stringify({ status: "processing" }));
           const notion = new NotionClient({ auth: NOTION_TOKEN });
           await ensureNotionSchema(notion);
-          const chunkString = (s, size = 1900) => {
-            const out = [];
-            for (let i = 0; i < s.length; i += size) out.push(s.slice(i, i + size));
-            return out;
-          };
-          // Parse analysis for properties
-          let parsed = {};
-          try { parsed = JSON.parse(analysisJsonStr); } catch {}
-          const norm = {};
-          Object.entries(parsed || {}).forEach(([k, v]) => { norm[String(k).toLowerCase().replace(/\s+/g, "_")] = v; });
+
+          // Parse again for properties
+          let parsed = {}; try { parsed = JSON.parse(analysisJsonStr); } catch {}
+          const norm = {}; Object.entries(parsed || {}).forEach(([k, v]) => { norm[String(k).toLowerCase().replace(/\s+/g, "_")] = v; });
+
+          // Title = заказчик
+          let titleText = '';
+          const customer = norm['наименование_компании_заказчика'] ?? norm['заказчик'];
+          if (Array.isArray(customer)) titleText = customer.filter(Boolean)[0] || '';
+          else if (typeof customer === 'string') titleText = customer;
+          if (!titleText) titleText = properName;
+
           const descrProp = typeof norm["описание_документа"] === "string" ? norm["описание_документа"] : "";
           const linkProp0 = typeof norm["ссылка_на_оригинальное_тз"] === "string" ? norm["ссылка_на_оригинальное_тз"] : "";
           const finalLink = linkProp0 || originalUrl || "";
-          const contactsProp = Array.isArray(norm["контактные_лица"]) ? norm["контактные_лица"].map((c)=>{
-            if (c && typeof c === 'object') return [c.фио, c.роль, c.email, c.телефон].filter(Boolean).join(' — ');
-            return String(c);
-          }).join("\n") : "";
-          const upgradesProp = Array.isArray(norm["требуемые_доработки"]) ? norm["требуемые_доработки"].map((u)=>{
-            if (u && typeof u === 'object') return [u.описание, u.приоритет, u.оценка_сложности].filter(Boolean).join(' — ');
-            return String(u);
-          }).join("\n") : "";
-          const mappingProp = Array.isArray(norm["сопоставление_с_dbrain"]) ? norm["сопоставление_с_dbrain"].map((m)=>{
-            if (m && typeof m === 'object') return [m.требование, m.статус, m.комментарий].filter(Boolean).join(' — ');
-            return String(m);
-          }).join("\n") : "";
 
-          const blocks = buildNotionBlocksFromAnalysis(analysisJsonStr);
           const pageProps = {
-            Name: { title: [{ text: { content: properName } }] },
+            Name: { title: [{ text: { content: titleText.slice(0, 200) } }] },
             "Дата загрузки": { date: { start: new Date().toISOString() } },
             "Тип документа": { select: { name: mimetype.includes("pdf") ? "PDF" : "DOCX" } },
             Статус: { select: { name: "Новый" } },
           };
           if (descrProp) pageProps["Описание"] = { rich_text: [{ text: { content: String(descrProp).slice(0, 1900) } }] };
           if (finalLink) pageProps["Ссылка на ТЗ"] = { url: finalLink };
-          if (contactsProp) pageProps["Контакты"] = { rich_text: [{ text: { content: contactsProp.slice(0, 1900) } }] };
-          if (upgradesProp) pageProps["Доработки"] = { rich_text: [{ text: { content: upgradesProp.slice(0, 1900) } }] };
-          if (mappingProp) pageProps["Сопоставление с Dbrain"] = { rich_text: [{ text: { content: mappingProp.slice(0, 1900) } }] };
 
-          const page = await notion.pages.create({
-            parent: { database_id: NOTION_DATABASE_ID },
-            properties: pageProps,
-            children: blocks,
-          });
-          // Mark as done
-          try {
-            await notion.pages.update({ page_id: page.id, properties: { Статус: { select: { name: "Готово" } } } });
-          } catch {}
+          // Build content blocks with summary at top
+          const blocks = buildNotionBlocksFromAnalysis(analysisJsonStr);
+
+          // Create page
+          const page = await notion.pages.create({ parent: { database_id: NOTION_DATABASE_ID }, properties: pageProps, children: blocks });
+
+          // Attach original file if present
+          if (originalUrl) {
+            try {
+              await notion.blocks.children.append({ block_id: page.id, children: [ { object: 'block', type: 'file', file: { type: 'external', external: { url: originalUrl } } } ] });
+            } catch {}
+          }
+
+          try { await notion.pages.update({ page_id: page.id, properties: { Статус: { select: { name: "Готово" } } } }); } catch {}
           const pageUrl = `https://www.notion.so/${String(page.id).replace(/-/g,'')}`;
           fs.writeFileSync(statusFile, JSON.stringify({ status: "success", pageId: page.id, pageUrl }));
         } catch (notionErr) {
@@ -447,10 +436,7 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
       })();
     }
 
-    // 2) Cleanup temp upload file
-    if (req.file?.path) {
-      fs.unlink(req.file.path, () => {});
-    }
+    if (req.file?.path) { fs.unlink(req.file.path, () => {}); }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
