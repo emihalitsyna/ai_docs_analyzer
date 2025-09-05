@@ -348,7 +348,16 @@
       startProgress();
       try {
         const res = await fetch('/api/upload', { method: 'POST', body: data });
-        const json = await res.json();
+        let payload = null;
+        try {
+          payload = await res.clone().json();
+        } catch {
+          const text = await res.text();
+          showToast('Ошибка: ' + (text?.slice(0, 200) || 'unknown'));
+          endProgress();
+          return;
+        }
+        const json = payload || {};
         if (json.success) {
           showToast('Анализ выполнен успешно');
           loadHistory();

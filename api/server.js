@@ -429,6 +429,17 @@ app.post("/api/diag/notion-fix", async (req, res) => {
   }
 });
 
+app.use((err, req, res, next) => {
+  console.error('request_error', err);
+  if (err && err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ error: 'Файл слишком большой (макс. 10 МБ)' });
+  }
+  if (err && /Only PDF and DOCX files are allowed/i.test(err.message || '')) {
+    return res.status(400).json({ error: 'Разрешены только файлы PDF и DOCX' });
+  }
+  res.status(500).json({ error: err?.message || 'Internal Server Error' });
+});
+
 export default app;
 
 // For local dev
