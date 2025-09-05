@@ -141,20 +141,28 @@
       const list = document.getElementById('history-list');
       list.innerHTML = '';
       const res = await fetch('/api/analyses');
-      const files = await res.json();
-      if (!files.length) list.innerHTML = '<li>Нет данных</li>';
-      files.forEach((f) => {
+      const items = await res.json();
+      if (!items.length) { list.innerHTML = '<li>Нет данных</li>'; return; }
+      items.forEach((it) => {
         const li = document.createElement('li');
-        const a = document.createElement('a');
-        a.href = '#';
-        a.textContent = f;
-        a.addEventListener('click', async (e) => {
-          e.preventDefault();
-          const r = await fetch(`/api/analyses/${encodeURIComponent(f)}`);
-          const txt = await r.text();
-          renderAnalysis(txt);
-        });
-        li.appendChild(a);
+        if (it.source === 'notion') {
+          const a = document.createElement('a');
+          a.href = it.pageUrl; a.target = '_blank';
+          a.textContent = `${it.title} (Notion)`;
+          li.appendChild(a);
+        } else {
+          const a = document.createElement('a');
+          a.href = '#';
+          a.textContent = it.filename || 'unknown.json';
+          a.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const r = await fetch(`/api/analyses/${encodeURIComponent(it.filename)}`);
+            const txt = await r.text();
+            renderAnalysis(txt);
+            const url=new URL(location); url.searchParams.set('file', it.filename); history.replaceState(null,'',url);
+          });
+          li.appendChild(a);
+        }
         list.appendChild(li);
       });
     }

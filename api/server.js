@@ -425,11 +425,42 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
 });
 
 // History list endpoint
-app.get("/api/analyses", (req, res) => {
-  const dir = path.join("/tmp", "analysis_results");
-  if (!fs.existsSync(dir)) return res.json([]);
-  const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json"));
-  res.json(files);
+app.get("/api/analyses", async (req, res) => {
+  try {
+    const out = [];
+    // Notion-backed history (latest first)
+    if (NOTION_TOKEN && NOTION_DATABASE_ID) {
+      try {
+        const notion = new NotionClient({ auth: NOTION_TOKEN });
+        const result = await notion.databases.query({
+          database_id: NOTION_DATABASE_ID,
+          page_size: 20,
+          sorts: [{ timestamp: "created_time", direction: "descending" }],
+        });
+        (result.results || []).forEach((p) => {
+          const title = (p.properties?.Name?.title || []).map((t) => t?.plain_text || "").join("") || "Untitled";
+          const pageId = p.id;
+          const pageUrl = `https://www.notion.so/${String(pageId).replace(/-/g,'')}`;
+          out.push({ source: 'notion', pageId, pageUrl, title, created_time: p.created_time });
+        });
+      } catch (e) {
+        // ignore notion errors, still return local files below
+      }
+    }
+    // Local files history (fallback)
+    const dir = path.join("/tmp", "analysis_results");
+    if (fs.existsSync(dir)) {
+      const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json"));
+      files.sort((a,b)=>{
+        const getTs = (name)=>{ const m=name.match(/_(\d+)\.json$/); return m?Number(m[1]):0; };
+        return getTs(b)-getTs(a);
+      });
+      files.forEach((f)=> out.push({ source: 'local', filename: f }));
+    }
+    res.json(out);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // Specific analysis endpoint
