@@ -28,7 +28,6 @@ export async function chatCompletion(messages) {
   const response = await openai.responses.create({
     model: OPENAI_MODEL,
     input,
-    temperature: OPENAI_TEMPERATURE,
     max_output_tokens: OPENAI_MAX_TOKENS,
   });
   const text = response.output_text || response.output?.map?.(p=>p?.content?.map?.(c=>c?.text?.value||"").join("")).join("\n");
