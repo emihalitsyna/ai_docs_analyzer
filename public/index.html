@@ -249,23 +249,41 @@
 
       // описание документа
       const descr = normMap['описание_документа'];
-      if(descr){
-        container.appendChild(createHeading('Описание документа'));
-        const node=processValue(descr);
-        if(node) container.appendChild(node);
-      }
+      container.appendChild(createHeading('Описание'));
+      const nodeDescr=processValue(descr||''); if(nodeDescr) container.appendChild(nodeDescr);
 
-      // ссылка на оригинальное ТЗ
-      const tz = normMap['ссылка_на_оригинальное_тз'];
-      if(typeof tz==='string' && tz){
-        container.appendChild(createHeading('Ссылка на оригинальное ТЗ'));
-        const a=document.createElement('a'); a.href=tz; a.target='_blank'; a.textContent=tz; container.appendChild(a);
-      }
+      // вложенный блок требований (технические/функциональные/нефункциональные/инфраструктурные/ограничения)
+      const reqDiv=document.createElement('div');
+      reqDiv.style.paddingLeft='1rem';
+      const reqKeys=[
+        'технические_требования',
+        'функциональные_требования',
+        'нефункциональные_требования',
+        'инфраструктурные_требования',
+        'ограничения_и_риски',
+      ];
+      reqKeys.forEach(k=>{
+        const val=normMap[k];
+        reqDiv.appendChild(createHeading(k.replace(/_/g,' '),4));
+        const n=processValue(val||[]);
+        if(n) reqDiv.appendChild(n);
+      });
+      container.appendChild(reqDiv);
 
-      // контакты
+      // Типы документов на обработку
+      container.appendChild(createHeading('Типы документов на обработку'));
+      const docsVal = normMap['необходимые_документы_и_поля'];
+      const docsNode = processValue(docsVal||[]); if(docsNode) container.appendChild(docsNode);
+
+      // Список необходимых доработок
+      const upgrades = normMap['требуемые_доработки'];
+      container.appendChild(createHeading('Список необходимых доработок (после сравнения с базой знаний Dbrain)'));
+      const upNode = processValue(upgrades||[]); if(upNode) container.appendChild(upNode);
+
+      // Контакты
       const contacts = normMap['контактные_лица'];
+      container.appendChild(createHeading('Контактные лица, способ связи'));
       if(Array.isArray(contacts) && contacts.length){
-        container.appendChild(createHeading('Контактные лица'));
         const ul=document.createElement('ul');
         contacts.forEach(c=>{
           const li=document.createElement('li');
@@ -278,50 +296,10 @@
         container.appendChild(ul);
       }
 
-      // customer
-      const cust = normMap[topOrder[0]] ?? normMap['заказчик'];
-      if(cust!==undefined){
-        container.appendChild(createHeading('Наименование заказчика'));
-        const node=processValue(cust);
-        if(node) container.appendChild(node);
-      }
-
-      // technical reqs section wrapper
-      const techVal = normMap[topOrder[1]];
-      container.appendChild(createHeading('Технические требования'));
-      if(techVal!==undefined){
-        const node=processValue(techVal);
-        if(node) container.appendChild(node);
-      }
-
-      // subsections indented
-      const indentDiv=document.createElement('div');
-      indentDiv.style.paddingLeft='1rem';
-      subOrder.forEach(subKey=>{
-        const val=normMap[subKey];
-        if(val===undefined) return;
-        indentDiv.appendChild(createHeading(subKey.replace(/_/g,' '),4));
-        const n=processValue(val);
-        if(n) indentDiv.appendChild(n);
-      });
-      container.appendChild(indentDiv);
-
-      // требуемые доработки
-      const upgrades = normMap['требуемые_доработки'];
-      if(Array.isArray(upgrades) && upgrades.length){
-        container.appendChild(createHeading('Требуемые доработки'));
-        const ul=document.createElement('ul');
-        upgrades.forEach(u=>{
-          const li=document.createElement('li');
-          if(u && typeof u==='object'){
-            const main=[u.описание,u.приоритет,u.оценка_сложности].filter(Boolean).join(' — ');
-            li.innerHTML = main ? `<strong>${main}</strong>` : JSON.stringify(u);
-            if(u.цитата) li.innerHTML += ` <em>«${u.цитата}»</em>`;
-          } else { li.textContent=String(u); }
-          ul.appendChild(li);
-        });
-        container.appendChild(ul);
-      }
+      // Ссылки и файлы
+      const tz = normMap['ссылка_на_оригинальное_тз'];
+      container.appendChild(createHeading('Ссылки и файлы'));
+      if(typeof tz==='string' && tz){ const a=document.createElement('a'); a.href=tz; a.target='_blank'; a.textContent=tz; container.appendChild(a); }
 
       // сопоставление с Dbrain
       const mapping = normMap['сопоставление_с_dbrain'];
