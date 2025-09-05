@@ -90,6 +90,9 @@
         <span id="pill-notion" class="chip info">Notion: n/a</span>
         <span id="status-time" style="margin-left:auto;font-size:0.75rem;color:#777;"></span>
       </div>
+      <div id="notion-link" class="hidden" style="margin-top:0.5rem;">
+        <a id="notion-a" href="#" target="_blank">Открыть в Notion</a>
+      </div>
     </header>
 
     <nav class="tabs">
@@ -237,6 +240,37 @@
         'сроки_реализации_и_стоимость_проекта',
         'необходимые_документы_и_поля'];
 
+      // описание документа
+      const descr = normMap['описание_документа'];
+      if(descr){
+        container.appendChild(createHeading('Описание документа'));
+        const node=processValue(descr);
+        if(node) container.appendChild(node);
+      }
+
+      // ссылка на оригинальное ТЗ
+      const tz = normMap['ссылка_на_оригинальное_тз'];
+      if(typeof tz==='string' && tz){
+        container.appendChild(createHeading('Ссылка на оригинальное ТЗ'));
+        const a=document.createElement('a'); a.href=tz; a.target='_blank'; a.textContent=tz; container.appendChild(a);
+      }
+
+      // контакты
+      const contacts = normMap['контактные_лица'];
+      if(Array.isArray(contacts) && contacts.length){
+        container.appendChild(createHeading('Контактные лица'));
+        const ul=document.createElement('ul');
+        contacts.forEach(c=>{
+          const li=document.createElement('li');
+          if(c && typeof c==='object'){
+            const parts=[c.фио,c.роль,c.email,c.телефон].filter(Boolean);
+            li.textContent=parts.join(' — ');
+          } else { li.textContent=String(c); }
+          ul.appendChild(li);
+        });
+        container.appendChild(ul);
+      }
+
       // customer
       const cust = normMap[topOrder[0]] ?? normMap['заказчик'];
       if(cust!==undefined){
@@ -264,6 +298,40 @@
         if(n) indentDiv.appendChild(n);
       });
       container.appendChild(indentDiv);
+
+      // требуемые доработки
+      const upgrades = normMap['требуемые_доработки'];
+      if(Array.isArray(upgrades) && upgrades.length){
+        container.appendChild(createHeading('Требуемые доработки'));
+        const ul=document.createElement('ul');
+        upgrades.forEach(u=>{
+          const li=document.createElement('li');
+          if(u && typeof u==='object'){
+            const main=[u.описание,u.приоритет,u.оценка_сложности].filter(Boolean).join(' — ');
+            li.innerHTML = main ? `<strong>${main}</strong>` : JSON.stringify(u);
+            if(u.цитата) li.innerHTML += ` <em>«${u.цитата}»</em>`;
+          } else { li.textContent=String(u); }
+          ul.appendChild(li);
+        });
+        container.appendChild(ul);
+      }
+
+      // сопоставление с Dbrain
+      const mapping = normMap['сопоставление_с_dbrain'];
+      if(Array.isArray(mapping) && mapping.length){
+        container.appendChild(createHeading('Сопоставление с Dbrain'));
+        const ul=document.createElement('ul');
+        mapping.forEach(m=>{
+          const li=document.createElement('li');
+          if(m && typeof m==='object'){
+            const main=[m.требование,m.статус,m.комментарий].filter(Boolean).join(' — ');
+            li.innerHTML = main ? `<strong>${main}</strong>` : JSON.stringify(m);
+            if(m.цитата) li.innerHTML += ` <em>«${m.цитата}»</em>`;
+          } else { li.textContent=String(m); }
+          ul.appendChild(li);
+        });
+        container.appendChild(ul);
+      }
     }
 
     function setRetrievalChip(r){
@@ -278,7 +346,11 @@
       const pill=document.getElementById('pill-notion');
       if(!state){ pill.textContent='Notion: n/a'; pill.className='chip info'; return; }
       if(state.status==='processing'){ pill.textContent='Notion: processing…'; pill.className='chip info'; return; }
-      if(state.status==='success'){ pill.textContent='Notion: success'; pill.className='chip ok'; return; }
+      if(state.status==='success'){
+        pill.textContent='Notion: success'; pill.className='chip ok';
+        if(state.pageUrl){ const nl=document.getElementById('notion-link'); const na=document.getElementById('notion-a'); na.href=state.pageUrl; nl.classList.remove('hidden'); }
+        return;
+      }
       if(state.status==='error'){ pill.textContent='Notion: error'; pill.className='chip bad'; return; }
       pill.textContent='Notion: unknown'; pill.className='chip info';
     }
@@ -288,7 +360,7 @@
         try{
           const r = await fetch(`/api/notion-status/${encodeURIComponent(filename)}`);
           const s = await r.json();
-          if(s.status==='success' || s.status==='error'){ setNotionChip(s); return; }
+          if(s.status==='success' || s.status==='error'){ setNotionChip(s); if(s.status==='success' && s.pageUrl){ showBanner('Страница в Notion создана','Открыть', s.pageUrl); } return; }
         }catch{}
         await new Promise(r=>setTimeout(r,1000));
       }
@@ -373,6 +445,8 @@
           }
           setRetrievalChip(json.retrieval);
           if(json.notion?.queued){ pollNotion(json.filename); } else { setNotionChip(null); }
+          // permalink update
+          if(json.filename){ const url=new URL(location); url.searchParams.set('file', json.filename); history.replaceState(null,'',url); }
           endProgress();
         } else {
           showToast('Ошибка: ' + (json.error || 'unknown'));
@@ -403,6 +477,13 @@
     // initial
     fetchStatus();
     loadHistory();
+    (async function initFromQuery(){
+      const p=new URLSearchParams(location.search);
+      const f=p.get('file');
+      if(f){
+        try{ const r=await fetch(`/api/analyses/${encodeURIComponent(f)}`); const txt=await r.text(); renderAnalysis(txt); }catch{}
+      }
+    })();
   </script>
 </body>
 </html> 
