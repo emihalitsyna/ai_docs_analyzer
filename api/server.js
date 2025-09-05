@@ -180,9 +180,20 @@ const upload = multer({
   dest: UPLOAD_DIR,
   limits: { fileSize: MAX_FILE_SIZE_BYTES },
   fileFilter: (req, file, cb) => {
-    const allowed = ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
-    if (allowed.includes(file.mimetype)) cb(null, true);
-    else cb(new Error("Only PDF and DOCX files are allowed"));
+    const allowed = [
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/octet-stream", // Safari/unknown
+    ];
+    if (!allowed.includes(file.mimetype)) return cb(new Error("Only PDF and DOCX files are allowed"));
+    // If MIME is generic, validate by filename extension
+    if (file.mimetype === "application/octet-stream") {
+      const name = (file.originalname || "").toLowerCase();
+      if (!name.endsWith(".pdf") && !name.endsWith(".docx")) {
+        return cb(new Error("Only PDF and DOCX files are allowed"));
+      }
+    }
+    cb(null, true);
   },
 });
 
