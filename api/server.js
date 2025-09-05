@@ -28,12 +28,19 @@ async function ensureNotionSchema(notion) {
     { name: "Дата загрузки", type: "date" },
     { name: "Тип документа", type: "select", options: ["PDF", "DOCX"] },
     { name: "Статус", type: "select", options: ["Новый", "Готово", "Ошибка"] },
+    { name: "Описание", type: "rich_text" },
+    { name: "Ссылка на ТЗ", type: "url" },
+    { name: "Контакты", type: "rich_text" },
+    { name: "Доработки", type: "rich_text" },
+    { name: "Сопоставление с Dbrain", type: "rich_text" },
   ];
   const update = { properties: {} };
   for (const r of required) {
     if (!props[r.name]) {
       if (r.type === "date") update.properties[r.name] = { date: {} };
       if (r.type === "select") update.properties[r.name] = { select: { options: (r.options || []).map((n) => ({ name: n })) } };
+      if (r.type === "url") update.properties[r.name] = { url: {} };
+      if (r.type === "rich_text") update.properties[r.name] = { rich_text: {} };
     } else if (r.type === "select") {
       // merge options if missing
       const existing = (props[r.name].select?.options || []).map((o) => o.name);
@@ -51,8 +58,10 @@ async function ensureNotionSchema(notion) {
 // Build human-readable Notion blocks from analysis JSON string
 function buildNotionBlocksFromAnalysis(analysisJsonStr) {
   const rich = (text) => [{ type: "text", text: { content: String(text) } }];
+  const richLink = (text, url) => [{ type: "text", text: { content: String(text), link: url ? { url } : null } }];
   const heading = (text, level = 2) => ({ object: "block", type: `heading_${level}`, [`heading_${level}`]: { rich_text: rich(text) } });
   const para = (text) => ({ object: "block", type: "paragraph", paragraph: { rich_text: rich(text) } });
+  const paraLink = (text, url) => ({ object: "block", type: "paragraph", paragraph: { rich_text: richLink(text, url) } });
   const bullet = (text, children) => ({ object: "block", type: "bulleted_list_item", bulleted_list_item: { rich_text: rich(text), children } });
   const numbered = (text, children) => ({ object: "block", type: "numbered_list_item", numbered_list_item: { rich_text: rich(text), children } });
 
@@ -62,7 +71,7 @@ function buildNotionBlocksFromAnalysis(analysisJsonStr) {
   } catch {
     // Fallback: try to strip code fences and parse first {...}
     try {
-      let cleaned = analysisJsonStr.replace(/^```[a-zA-Z]*[\s\r\n]+/i, "").replace(/```\s*$/i, "").trim();
+      let cleaned = analysisJsonStr.replace(/^```[a-zA-Z*[\s\r\n]+/i, "").replace(/```\s*$/i, "").trim();
       const first = cleaned.indexOf("{");
       const last = cleaned.lastIndexOf("}");
       if (first !== -1 && last !== -1) cleaned = cleaned.slice(first, last + 1);
@@ -82,6 +91,34 @@ function buildNotionBlocksFromAnalysis(analysisJsonStr) {
 
   const blocks = [];
 
+  // Описание документа
+  const descr = map["описание_документа"];
+  if (descr) {
+    blocks.push(heading("Описание документа", 2));
+    blocks.push(para(typeof descr === "string" ? descr : JSON.stringify(descr)));
+  }
+
+  // Ссылка на оригинальное ТЗ
+  const tzUrl = typeof map["ссылка_на_оригинальное_тз"] === "string" ? map["ссылка_на_оригинальное_тз"] : null;
+  if (tzUrl) {
+    blocks.push(heading("Ссылка на оригинальное ТЗ", 2));
+    blocks.push(paraLink(tzUrl, tzUrl));
+  }
+
+  // Контактные лица
+  const contacts = map["контактные_лица"];
+  if (Array.isArray(contacts) && contacts.length) {
+    blocks.push(heading("Контактные лица", 2));
+    contacts.forEach((c) => {
+      if (c && typeof c === "object") {
+        const line = [c.фио, c.роль, c.email, c.телефон].filter(Boolean).join(" — ");
+        blocks.push(bullet(line || JSON.stringify(c)));
+      } else {
+        blocks.push(bullet(String(c)));
+      }
+    });
+  }
+
   // Заказчик
   const customer = map["наименование_компании_заказчика"] ?? map["заказчик"];
   if (customer) {
@@ -94,14 +131,30 @@ function buildNotionBlocksFromAnalysis(analysisJsonStr) {
   const tech = map["технические_требования"];
   if (tech && Array.isArray(tech) && tech.length) {
     blocks.push(heading("1.1. Требования", 2));
-    tech.forEach((t) => blocks.push(bullet(t)));
+    tech.forEach((t) => {
+      if (t && typeof t === "object") {
+        const line = t.описание || JSON.stringify(t);
+        const children = t.цитата ? [para(`«${t.цитата}»`)] : undefined;
+        blocks.push(bullet(line, children));
+      } else {
+        blocks.push(bullet(String(t)));
+      }
+    });
   }
 
   // Ограничения и риски
   const limits = map["ограничения_и_риски"] ?? map["ограничения"];
   if (limits && Array.isArray(limits) && limits.length) {
     blocks.push(heading("1.2. Ограничения", 2));
-    limits.forEach((t) => blocks.push(bullet(t)));
+    limits.forEach((t) => {
+      if (t && typeof t === "object") {
+        const line = t.описание || JSON.stringify(t);
+        const children = t.цитата ? [para(`«${t.цитата}»`)] : undefined;
+        blocks.push(bullet(line, children));
+      } else {
+        blocks.push(bullet(String(t)));
+      }
+    });
   }
 
   // Функциональные / Нефункциональные / Инфраструктурные
@@ -113,7 +166,15 @@ function buildNotionBlocksFromAnalysis(analysisJsonStr) {
   sections.forEach(([title, arr]) => {
     if (arr && Array.isArray(arr) && arr.length) {
       blocks.push(heading(title, 2));
-      arr.forEach((t) => blocks.push(bullet(t)));
+      arr.forEach((t) => {
+        if (t && typeof t === "object") {
+          const line = t.описание || JSON.stringify(t);
+          const children = t.цитата ? [para(`«${t.цитата}»`)] : undefined;
+          blocks.push(bullet(line, children));
+        } else {
+          blocks.push(bullet(String(t)));
+        }
+      });
     }
   });
 
@@ -141,6 +202,36 @@ function buildNotionBlocksFromAnalysis(analysisJsonStr) {
     });
   }
 
+  // Требуемые доработки
+  const upgrades = map["требуемые_доработки"];
+  if (Array.isArray(upgrades) && upgrades.length) {
+    blocks.push(heading("Требуемые доработки", 2));
+    upgrades.forEach((u) => {
+      if (u && typeof u === "object") {
+        const main = [u.описание, u.приоритет, u.оценка_сложности].filter(Boolean).join(" — ");
+        const children = u.цитата ? [para(`«${u.цитата}»`)] : undefined;
+        blocks.push(bullet(main || JSON.stringify(u), children));
+      } else {
+        blocks.push(bullet(String(u)));
+      }
+    });
+  }
+
+  // Сопоставление с Dbrain
+  const mapping = map["сопоставление_с_dbrain"];
+  if (Array.isArray(mapping) && mapping.length) {
+    blocks.push(heading("Сопоставление с Dbrain", 2));
+    mapping.forEach((m) => {
+      if (m && typeof m === "object") {
+        const main = [m.требование, m.статус, m.комментарий].filter(Boolean).join(" — ");
+        const children = m.цитата ? [para(`«${m.цитата}»`)] : undefined;
+        blocks.push(bullet(main || JSON.stringify(m), children));
+      } else {
+        blocks.push(bullet(String(m)));
+      }
+    });
+  }
+
   if (!blocks.length) {
     // Fallback to code block if nothing produced
     return [{ object: "block", type: "code", code: { language: "json", rich_text: rich(analysisJsonStr.slice(0, 1900)) } }];
@@ -155,7 +246,7 @@ function normalizeJsonString(possible) {
     return JSON.stringify(obj);
   } catch {
     try {
-      let cleaned = String(possible).replace(/^```[a-zA-Z]*[\s\r\n]+/i, "").replace(/```\s*$/i, "").trim();
+      let cleaned = String(possible).replace(/^```[a-zA-Z*[\s\r\n]+/i, "").replace(/```\s*$/i, "").trim();
       const first = cleaned.indexOf("{");
       const last = cleaned.lastIndexOf("}");
       if (first !== -1 && last !== -1) cleaned = cleaned.slice(first, last + 1);
@@ -271,22 +362,50 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
             for (let i = 0; i < s.length; i += size) out.push(s.slice(i, i + size));
             return out;
           };
+          // Parse analysis for properties
+          let parsed = {};
+          try { parsed = JSON.parse(analysisJsonStr); } catch {}
+          const norm = {};
+          Object.entries(parsed || {}).forEach(([k, v]) => { norm[String(k).toLowerCase().replace(/\s+/g, "_")] = v; });
+          const descrProp = typeof norm["описание_документа"] === "string" ? norm["описание_документа"] : "";
+          const linkProp = typeof norm["ссылка_на_оригинальное_тз"] === "string" ? norm["ссылка_на_оригинальное_тз"] : "";
+          const contactsProp = Array.isArray(norm["контактные_лица"]) ? norm["контактные_лица"].map((c)=>{
+            if (c && typeof c === 'object') return [c.фио, c.роль, c.email, c.телефон].filter(Boolean).join(' — ');
+            return String(c);
+          }).join("\n") : "";
+          const upgradesProp = Array.isArray(norm["требуемые_доработки"]) ? norm["требуемые_доработки"].map((u)=>{
+            if (u && typeof u === 'object') return [u.описание, u.приоритет, u.оценка_сложности].filter(Boolean).join(' — ');
+            return String(u);
+          }).join("\n") : "";
+          const mappingProp = Array.isArray(norm["сопоставление_с_dbrain"]) ? norm["сопоставление_с_dbrain"].map((m)=>{
+            if (m && typeof m === 'object') return [m.требование, m.статус, m.комментарий].filter(Boolean).join(' — ');
+            return String(m);
+          }).join("\n") : "";
+
           const blocks = buildNotionBlocksFromAnalysis(analysisJsonStr);
+          const pageProps = {
+            Name: { title: [{ text: { content: properName } }] },
+            "Дата загрузки": { date: { start: new Date().toISOString() } },
+            "Тип документа": { select: { name: mimetype.includes("pdf") ? "PDF" : "DOCX" } },
+            Статус: { select: { name: "Новый" } },
+          };
+          if (descrProp) pageProps["Описание"] = { rich_text: [{ text: { content: String(descrProp).slice(0, 1900) } }] };
+          if (linkProp) pageProps["Ссылка на ТЗ"] = { url: linkProp };
+          if (contactsProp) pageProps["Контакты"] = { rich_text: [{ text: { content: contactsProp.slice(0, 1900) } }] };
+          if (upgradesProp) pageProps["Доработки"] = { rich_text: [{ text: { content: upgradesProp.slice(0, 1900) } }] };
+          if (mappingProp) pageProps["Сопоставление с Dbrain"] = { rich_text: [{ text: { content: mappingProp.slice(0, 1900) } }] };
+
           const page = await notion.pages.create({
             parent: { database_id: NOTION_DATABASE_ID },
-            properties: {
-              Name: { title: [{ text: { content: properName } }] },
-              "Дата загрузки": { date: { start: new Date().toISOString() } },
-              "Тип документа": { select: { name: mimetype.includes("pdf") ? "PDF" : "DOCX" } },
-              Статус: { select: { name: "Новый" } },
-            },
+            properties: pageProps,
             children: blocks,
           });
           // Mark as done
           try {
             await notion.pages.update({ page_id: page.id, properties: { Статус: { select: { name: "Готово" } } } });
           } catch {}
-          fs.writeFileSync(statusFile, JSON.stringify({ status: "success", pageId: page.id }));
+          const pageUrl = `https://www.notion.so/${String(page.id).replace(/-/g,'')}`;
+          fs.writeFileSync(statusFile, JSON.stringify({ status: "success", pageId: page.id, pageUrl }));
         } catch (notionErr) {
           console.error("Notion export error", notionErr);
           const statusFile = `${STATUS_DIR}/${filename}.json`;
@@ -347,7 +466,8 @@ app.get("/api/notion-status/:file", async (req, res) => {
       });
       if (result.results && result.results.length > 0) {
         const pageId = result.results[0].id;
-        return res.json({ status: "success", pageId });
+        const pageUrl = `https://www.notion.so/${String(pageId).replace(/-/g,'')}`;
+        return res.json({ status: "success", pageId, pageUrl });
       }
     } catch (e) {
       return res.json({ status: "error", message: e.message });
