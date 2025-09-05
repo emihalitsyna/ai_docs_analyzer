@@ -47,6 +47,8 @@ export const SYSTEM_PROMPT = `Ты эксперт по тендерам и ан�
 - Все цитаты — дословные короткие фрагменты из документа.
 - Не выдумывай контакты/URL/стоимость/сроки/соответствие Dbrain — оставляй пусто, если нет в тексте.`;
 
+const CHUNK_PROMPT_SUFFIX = `Ты видишь фрагмент большого документа. Извлеки ТОЛЬКО те данные, которые явно присутствуют в этом фрагменте. Не делай выводов по отсутствующим частям. Верни JSON ТОЧНО той же структуры, но оставляй пустые поля/массивы, если в этом фрагменте нет данных.`;
+
 function readDbrainKB() {
   try {
     if (DBRAIN_KB_PATH && fs.existsSync(DBRAIN_KB_PATH)) {
@@ -63,6 +65,78 @@ function buildPromptWithKB(basePrompt) {
   if (!kb) return basePrompt;
   const kbText = JSON.stringify(kb);
   return `${basePrompt}\n\nКонтекст о возможностях Dbrain (используй только для сопоставления и поиска доработок, не выдумывай факты):\n${kbText}`;
+}
+
+function safeParseJson(possible) {
+  try { return JSON.parse(possible); } catch {}
+  try {
+    let cleaned = String(possible).replace(/^```[a-zA-Z]*[\s\r\n]+/i, "").replace(/```\s*$/i, "").trim();
+    const first = cleaned.indexOf("{");
+    const last = cleaned.lastIndexOf("}");
+    if (first !== -1 && last !== -1) cleaned = cleaned.slice(first, last + 1);
+    cleaned = cleaned.replace(/,\s*([}\]])/g, "$1");
+    return JSON.parse(cleaned);
+  } catch { return null; }
+}
+
+function mergeUniqueStringArrays(a, b, limit = 12) {
+  const set = new Set([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])].filter(Boolean).map((s) => String(s).trim()).filter(Boolean));
+  return Array.from(set).slice(0, limit);
+}
+
+function mergeObjectItemArrays(a, b, key = 'описание', limit = 12) {
+  const norm = (arr) => (Array.isArray(arr) ? arr : []).map((x) => (x && typeof x === 'object') ? x : { [key]: String(x) });
+  const map = new Map();
+  for (const it of norm(a).concat(norm(b))) {
+    const k = (it[key] || '').trim();
+    if (!k) continue;
+    if (!map.has(k)) map.set(k, it);
+  }
+  return Array.from(map.values()).slice(0, limit);
+}
+
+function reduceAnalyses(partials) {
+  const out = {};
+  for (const p of partials) {
+    if (!p || typeof p !== 'object') continue;
+    // simple string fields
+    if (!out["описание_документа"] && p["описание_документа"]) out["описание_документа"] = p["описание_документа"];
+    if (!out["ссылка_на_оригинальное_тз"] && p["ссылка_на_оригинальное_тз"]) out["ссылка_на_оригинальное_тз"] = p["ссылка_на_оригинальное_тз"];
+    if (!out["наименование_компании_заказчика"] && p["наименование_компании_заказчика"]) out["наименование_компании_заказчика"] = p["наименование_компании_заказчика"];
+
+    // arrays of objects
+    out["технические_требования"] = mergeObjectItemArrays(out["технические_требования"], p["технические_требования"]);
+    out["функциональные_требования"] = mergeObjectItemArrays(out["функциональные_требования"], p["функциональные_требования"]);
+    out["нефункциональные_требования"] = mergeObjectItemArrays(out["нефункциональные_требования"], p["нефункциональные_требования"]);
+    out["инфраструктурные_требования"] = mergeObjectItemArrays(out["инфраструктурные_требования"], p["инфраструктурные_требования"]);
+    out["ограничения_и_риски"] = mergeObjectItemArrays(out["ограничения_и_риски"], p["ограничения_и_риски"]);
+
+    // contacts
+    out["контактные_лица"] = mergeObjectItemArrays(out["контактные_лица"], p["контактные_лица"], 'фио');
+
+    // docs and fields
+    if (Array.isArray(p["необходимые_документы_и_поля"])) {
+      const current = Array.isArray(out["необходимые_документы_и_поля"]) ? out["необходимые_документы_и_поля"] : [];
+      const merged = [...current];
+      const keyOf = (d) => (d && typeof d === 'object') ? (d.документ || d.название || d.name || JSON.stringify(d)) : String(d);
+      const index = new Map(current.map((d) => [keyOf(d), d]));
+      for (const d of p["необходимые_документы_и_поля"]) {
+        const k = keyOf(d);
+        if (!index.has(k)) { index.set(k, d); merged.push(d); }
+      }
+      out["необходимые_документы_и_поля"] = merged.slice(0, 20);
+    }
+
+    // do-works and mapping
+    out["требуемые_доработки"] = mergeObjectItemArrays(out["требуемые_доработки"], p["требуемые_доработки"]);
+    out["сопоставление_с_dbrain"] = mergeObjectItemArrays(out["сопоставление_с_dbrain"], p["сопоставление_с_dbrain"], 'требование');
+
+    // сроки/стоимость (string or string[])
+    const s = p["сроки_реализации_и_стоимость_проекта"];
+    if (Array.isArray(s)) out["сроки_реализации_и_стоимость_проекта"] = mergeUniqueStringArrays(out["сроки_реализации_и_стоимость_проекта"], s, 12);
+    else if (typeof s === 'string' && s.trim() && !out["сроки_реализации_и_стоимость_проекта"]) out["сроки_реализации_и_стоимость_проекта"] = s;
+  }
+  return out;
 }
 
 export default async function analyzeDocument(text, originalName) {
@@ -82,17 +156,37 @@ export default async function analyzeDocument(text, originalName) {
     return jsonStr;
   }
 
-  // Retrieval-like classic path for big texts (no VS)
+  // Full-document map-reduce across all chunks (no Vector Store)
   const chunks = chunkText(text);
-  const embeddings = await embedChunks(chunks);
-  // For MVP: just take first 10 chunks (could implement similarity search later)
-  const selectedChunks = chunks.slice(0, 10);
-  const messages = [
-    { role: "system", content: PROMPT },
-    { role: "user", content: selectedChunks.join("\n\n") },
-  ];
-  const jsonStr = await chatCompletion(messages);
-  return jsonStr;
+  const MAX_CHUNKS = 120; // защитный предел
+  const usedChunks = chunks.slice(0, MAX_CHUNKS);
+
+  const partials = [];
+  for (let i = 0; i < usedChunks.length; i++) {
+    const part = usedChunks[i];
+    const messages = [
+      { role: "system", content: `${PROMPT}\n\n${CHUNK_PROMPT_SUFFIX}` },
+      { role: "user", content: part },
+    ];
+    try {
+      const resp = await chatCompletion(messages);
+      const obj = safeParseJson(resp);
+      if (obj) partials.push(obj);
+    } catch {}
+  }
+
+  const reduced = reduceAnalyses(partials);
+  // Финальный выравнивающий проход: попросим модель привести в аккуратный вид (опционально)
+  try {
+    const messages = [
+      { role: "system", content: PROMPT },
+      { role: "user", content: `Сведи воедино и верни ЧИСТЫЙ JSON той же структуры из следующего результата: ${JSON.stringify(reduced)}` },
+    ];
+    const finalJson = await chatCompletion(messages);
+    return finalJson;
+  } catch {
+    return JSON.stringify(reduced);
+  }
 }
 
 export function saveAnalysis(jsonStr, originalName) {
