@@ -168,15 +168,6 @@ function buildNotionBlocksFromAnalysis(analysisJsonStr) {
     blocks.push(para("—"));
   }
 
-  // Наименование заказчика
-  blocks.push(heading("Наименование заказчика", 2));
-  const customer = map["наименование_компании_заказчика"] ?? map["заказчик"];
-  if (customer) {
-    if (Array.isArray(customer)) customer.forEach((it) => blocks.push(bullet(it)));
-    else blocks.push(para(customer));
-  } else {
-    blocks.push(para("—"));
-  }
 
   // Технические требования
   blocks.push(heading("1.1. Требования", 2));
