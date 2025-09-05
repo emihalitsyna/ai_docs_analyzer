@@ -21,6 +21,35 @@ const { BLOB_READ_WRITE_TOKEN } = cfgAll;
 const STATUS_DIR = "/tmp/notion_status";
 if (!fs.existsSync(STATUS_DIR)) fs.mkdirSync(STATUS_DIR, { recursive: true });
 
+function normalizeCompanyName(original) {
+  if (!original) return "";
+  let s = String(original).trim();
+  // Если есть кавычки, берем содержимое
+  const m = s.match(/[«“"']\s*([^«»“”"']+?)\s*[»”"']/);
+  if (m && m[1]) s = m[1].trim();
+  // Удаляем юр. формы в начале и в скобках
+  const legalForms = [
+    'общество с ограниченной ответственностью',
+    'акционерное общество',
+    'публичное акционерное общество',
+    'закрытое акционерное общество',
+    'открытое акционерное общество',
+    'индивидуальный предприниматель',
+    'ооо', 'ао', 'пао', 'зао', 'оао', 'ип'
+  ];
+  const reStart = new RegExp(`^(?:${legalForms.join('|')})\s+`, 'i');
+  s = s.replace(reStart, '');
+  // Удаляем повторы юр. форм в скобках
+  s = s.replace(/\((?:[^()]*?(?:ооо|ао|пао|зао|оао|ип)[^()]*)\)/gi, '').trim();
+  // Удаляем кавычки и лишние символы
+  s = s.replace(/[«»"'“”]/g, '').trim();
+  // Убираем хвосты типа ", ООО", " - ООО"
+  s = s.replace(/[,\-]\s*(?:ооо|ао|пао|зао|оао|ип)\b/gi, '').trim();
+  // Сжимаем пробелы
+  s = s.replace(/\s{2,}/g, ' ').trim();
+  return s || String(original).trim();
+}
+
 async function uploadToBlob(filePath, remoteName, contentType) {
   try {
     if (!BLOB_READ_WRITE_TOKEN) return null;
@@ -396,7 +425,7 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
           const customer = norm['наименование_компании_заказчика'] ?? norm['заказчик'];
           if (Array.isArray(customer)) titleText = customer.filter(Boolean)[0] || '';
           else if (typeof customer === 'string') titleText = customer;
-          if (!titleText) titleText = properName;
+          titleText = normalizeCompanyName(titleText || properName);
 
           const descrProp = typeof norm["описание_документа"] === "string" ? norm["описание_документа"] : "";
           const linkProp0 = typeof norm["ссылка_на_оригинальное_тз"] === "string" ? norm["ссылка_на_оригинальное_тз"] : "";
