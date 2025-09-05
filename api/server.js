@@ -16,8 +16,22 @@ import { uploadFileToVS } from "./retrieval.js";
 import analyzeDocument, { saveAnalysis } from "./analysis.js";
 import { Client as NotionClient } from "@notionhq/client";
 import os from "os";
+import { BLOB_READ_WRITE_TOKEN } from "../config.js";
 const STATUS_DIR = "/tmp/notion_status";
 if (!fs.existsSync(STATUS_DIR)) fs.mkdirSync(STATUS_DIR, { recursive: true });
+
+async function uploadToBlob(filePath, remoteName, contentType) {
+  try {
+    if (!BLOB_READ_WRITE_TOKEN) return null;
+    const { put } = await import('@vercel/blob');
+    const buf = fs.readFileSync(filePath);
+    const res = await put(`uploads/${Date.now()}_${remoteName}`, buf, { access: 'public', token: BLOB_READ_WRITE_TOKEN, contentType });
+    return res?.url || null;
+  } catch (e) {
+    console.warn('blob_upload_failed', e?.message || e);
+    return null;
+  }
+}
 
 // Ensure Notion database has required properties
 async function ensureNotionSchema(notion) {
@@ -311,6 +325,9 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
     // Fix filename mojibake (incoming latin1 -> utf8)
     let properName = Buffer.from(originalname, "latin1").toString("utf8");
     
+    // Upload original to Blob (optional)
+    const originalUrl = await uploadToBlob(filePath, properName, mimetype);
+
     let analysisJsonStr;
     let filename;
     let usedVectorStoreId = OPENAI_VECTOR_STORE;
@@ -331,6 +348,19 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
       analysisJsonStr = await analyzeDocument(text, properName);
     }
 
+    // If Blob URL is available, inject it when link field is empty/missing
+    if (originalUrl) {
+      try {
+        const obj = JSON.parse(analysisJsonStr);
+        const hasSnake = typeof obj['ссылка_на_оригинальное_тз'] === 'string' && obj['ссылка_на_оригинальное_тз'];
+        const hasSpaced = typeof obj['ссылка на оригинальное тз'] === 'string' && obj['ссылка на оригинальное тз'];
+        if (!hasSnake && !hasSpaced) {
+          obj['ссылка_на_оригинальное_тз'] = originalUrl;
+          analysisJsonStr = JSON.stringify(obj);
+        }
+      } catch {}
+    }
+
     // Normalize JSON for storage stability
     analysisJsonStr = normalizeJsonString(analysisJsonStr);
 
@@ -345,7 +375,8 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
       analysis: analysisJsonStr,
       retrieval: { vectorStore: usedVectorStoreId, assistant: OPENAI_ASSISTANT_ID ? true : false },
       retrievalFiles: retrievalFilesSummary,
-      notion: { queued: !!(NOTION_TOKEN && NOTION_DATABASE_ID) }
+      notion: { queued: !!(NOTION_TOKEN && NOTION_DATABASE_ID) },
+      upload: { blob: !!originalUrl, url: originalUrl }
     });
 
     // ---- Background side-effects (fire-and-forget) ----
@@ -368,7 +399,8 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
           const norm = {};
           Object.entries(parsed || {}).forEach(([k, v]) => { norm[String(k).toLowerCase().replace(/\s+/g, "_")] = v; });
           const descrProp = typeof norm["описание_документа"] === "string" ? norm["описание_документа"] : "";
-          const linkProp = typeof norm["ссылка_на_оригинальное_тз"] === "string" ? norm["ссылка_на_оригинальное_тз"] : "";
+          const linkProp0 = typeof norm["ссылка_на_оригинальное_тз"] === "string" ? norm["ссылка_на_оригинальное_тз"] : "";
+          const finalLink = linkProp0 || originalUrl || "";
           const contactsProp = Array.isArray(norm["контактные_лица"]) ? norm["контактные_лица"].map((c)=>{
             if (c && typeof c === 'object') return [c.фио, c.роль, c.email, c.телефон].filter(Boolean).join(' — ');
             return String(c);
@@ -390,7 +422,7 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
             Статус: { select: { name: "Новый" } },
           };
           if (descrProp) pageProps["Описание"] = { rich_text: [{ text: { content: String(descrProp).slice(0, 1900) } }] };
-          if (linkProp) pageProps["Ссылка на ТЗ"] = { url: linkProp };
+          if (finalLink) pageProps["Ссылка на ТЗ"] = { url: finalLink };
           if (contactsProp) pageProps["Контакты"] = { rich_text: [{ text: { content: contactsProp.slice(0, 1900) } }] };
           if (upgradesProp) pageProps["Доработки"] = { rich_text: [{ text: { content: upgradesProp.slice(0, 1900) } }] };
           if (mappingProp) pageProps["Сопоставление с Dbrain"] = { rich_text: [{ text: { content: mappingProp.slice(0, 1900) } }] };
