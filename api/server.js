@@ -286,13 +286,15 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
     let retrievalFilesSummary = null;
 
     if (OPENAI_VECTOR_STORE) {
-      // Retrieval-first: upload file to Vector Store and wait for indexing
+      // Retrieval-first: upload file to Vector Store and wait for indexing (для поиска/диагностики),
+      // но анализ всегда выполняем по извлечённому полному тексту
       const { vectorStoreId, filesSummary } = await uploadFileToVS(filePath, properName, mimetype, OPENAI_VECTOR_STORE);
       usedVectorStoreId = vectorStoreId;
       retrievalFilesSummary = filesSummary || null;
-      console.info(JSON.stringify({ event: 'analysis_path', mode: 'retrieval', assistant: !!OPENAI_ASSISTANT_ID, vectorStoreId, filename: properName, mimetype }));
+      console.info(JSON.stringify({ event: 'analysis_path', mode: 'retrieval+fulltext', assistant: !!OPENAI_ASSISTANT_ID, vectorStoreId, filename: properName, mimetype }));
       if (filesSummary) console.info(JSON.stringify({ event: 'vector_store_files', vectorStoreId, ...filesSummary }));
-      analysisJsonStr = await analyzeDocument("", properName);
+      const text = await extractText(filePath, mimetype);
+      analysisJsonStr = await analyzeDocument(text, properName);
     } else {
       // Classic path: extract full text and analyze directly
       console.info(JSON.stringify({ event: 'analysis_path', mode: 'classic', filename: properName, mimetype }));
