@@ -352,6 +352,25 @@
       setNotionChip({status:'unknown'});
     }
 
+    async function waitForAnalysisReady(filename){
+      for(let i=0;i<60;i++){ // до ~60с
+        try{
+          const r = await fetch(`/api/analyses/${encodeURIComponent(filename)}`);
+          const txt = await r.text();
+          try{
+            const obj = JSON.parse(txt);
+            if(obj && obj.status==='processing'){ await new Promise(rs=>setTimeout(rs,1000)); continue; }
+          }catch{
+            // если не JSON — попробуем распарсить как раньше; считаем, что готово
+            return txt;
+          }
+          return txt;
+        }catch{}
+        await new Promise(rs=>setTimeout(rs,1000));
+      }
+      return null;
+    }
+
     // Banner helpers
     function showBanner(msg, actionText, actionHref){
       const b=document.getElementById('banner');
@@ -424,9 +443,10 @@
           const txtAnalysis = json.analysis ?? '';
           if(txtAnalysis){
             renderAnalysis(txtAnalysis);
-          } else {
-            const resAnalysis = await fetch(`/api/analyses/${encodeURIComponent(json.filename)}`);
-            renderAnalysis(await resAnalysis.text());
+          } else if(json.filename){
+            const ready = await waitForAnalysisReady(json.filename);
+            if(ready){ renderAnalysis(ready); }
+            else { showToast('Анализ ожидает завершения...'); }
           }
           setRetrievalChip(json.retrieval);
           if(json.notion?.queued){ pollNotion(json.filename); } else { setNotionChip(null); }
