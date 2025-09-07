@@ -280,114 +280,115 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
     // Upload original to Blob (optional)
     const originalUrl = await uploadToBlob(filePath, properName, mimetype);
 
-    let analysisJsonStr;
-    let filename;
     let usedVectorStoreId = OPENAI_VECTOR_STORE;
     let retrievalFilesSummary = null;
 
+    // Pre-create analysis filename and placeholder
+    const safeName = `${path.parse(originalname).name}_${Date.now()}.json`;
+    const outDir = path.join("/tmp", "analysis_results");
+    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+    const outPath = path.join(outDir, safeName);
+    fs.writeFileSync(outPath, JSON.stringify({ status: "processing" }), "utf-8");
+
+    // If Retrieval enabled, upload to Vector Store (diagnostic/optional)
     if (OPENAI_VECTOR_STORE) {
-      // Retrieval-first: upload file to Vector Store and wait for indexing (для поиска/диагностики),
-      // но анализ всегда выполняем по извлечённому полному тексту
-      const { vectorStoreId, filesSummary } = await uploadFileToVS(filePath, properName, mimetype, OPENAI_VECTOR_STORE);
-      usedVectorStoreId = vectorStoreId;
-      retrievalFilesSummary = filesSummary || null;
-      console.info(JSON.stringify({ event: 'analysis_path', mode: 'retrieval+fulltext', assistant: !!OPENAI_ASSISTANT_ID, vectorStoreId, filename: properName, mimetype }));
-      if (filesSummary) console.info(JSON.stringify({ event: 'vector_store_files', vectorStoreId, ...filesSummary }));
-      const text = await extractText(filePath, mimetype);
-      analysisJsonStr = await analyzeDocument(text, properName);
-    } else {
-      // Classic path: extract full text and analyze directly
-      console.info(JSON.stringify({ event: 'analysis_path', mode: 'classic', filename: properName, mimetype }));
-      const text = await extractText(filePath, mimetype);
-      analysisJsonStr = await analyzeDocument(text, properName);
+      try {
+        const { vectorStoreId, filesSummary } = await uploadFileToVS(filePath, properName, mimetype, OPENAI_VECTOR_STORE);
+        usedVectorStoreId = vectorStoreId;
+        retrievalFilesSummary = filesSummary || null;
+        console.info(JSON.stringify({ event: 'analysis_path', mode: 'retrieval+fulltext', assistant: !!OPENAI_ASSISTANT_ID, vectorStoreId, filename: properName, mimetype }));
+        if (filesSummary) console.info(JSON.stringify({ event: 'vector_store_files', vectorStoreId, ...filesSummary }));
+      } catch (e) {
+        console.warn('vector_store_error', e?.message);
+      }
     }
 
-    // Prepare parsed map
-    let parsed = {};
-    try { parsed = JSON.parse(analysisJsonStr); } catch {}
-    const norm = {}; Object.entries(parsed || {}).forEach(([k, v]) => { norm[String(k).toLowerCase().replace(/\s+/g, "_")] = v; });
+    // Respond immediately; start background analysis
+    res.json({
+      success: true,
+      filename: safeName,
+      notionPageId: null,
+      analysis: null,
+      retrieval: { vectorStore: usedVectorStoreId, assistant: OPENAI_ASSISTANT_ID ? true : false },
+      retrievalFiles: retrievalFilesSummary,
+      notion: { queued: !!(NOTION_TOKEN && NOTION_DATABASE_ID) },
+      upload: { blob: !!originalUrl, url: originalUrl }
+    });
 
-    // If Blob URL is available, inject it when link field is empty/missing
-    if (originalUrl) {
-      const linkSnake = typeof norm['ссылка_на_оригинальное_тз'] === 'string' ? norm['ссылка_на_оригинальное_тз'] : '';
-      if (!linkSnake) { norm['ссылка_на_оригинальное_тз'] = originalUrl; analysisJsonStr = JSON.stringify({ ...parsed, 'ссылка_на_оригинальное_тз': originalUrl }); }
-    }
-
-    // Normalize JSON for storage stability
-    analysisJsonStr = normalizeJsonString(analysisJsonStr);
-
-    // Save locally
-    filename = saveAnalysis(analysisJsonStr, originalname);
-
-    // Respond
-    res.json({ success: true, filename, notionPageId: null, analysis: analysisJsonStr, retrieval: { vectorStore: usedVectorStoreId, assistant: OPENAI_ASSISTANT_ID ? true : false }, retrievalFiles: retrievalFilesSummary, notion: { queued: !!(NOTION_TOKEN && NOTION_DATABASE_ID) }, upload: { blob: !!originalUrl, url: originalUrl } });
-
-    // Background Notion export
-    if (NOTION_TOKEN && NOTION_DATABASE_ID) {
-      (async () => {
+    // ---- Background work ----
+    (async () => {
+      try {
+        // 1) Extract full text and analyze
+        const text = await extractText(filePath, mimetype);
+        let analysisJsonStr = await analyzeDocument(text, properName);
+        // Normalize
+        analysisJsonStr = normalizeJsonString(analysisJsonStr);
+        // If Blob URL is available, inject it when link field is empty/missing
         try {
-          const statusFile = `${STATUS_DIR}/${filename}.json`;
-          fs.writeFileSync(statusFile, JSON.stringify({ status: "processing" }));
-          const notion = new NotionClient({ auth: NOTION_TOKEN });
-          await ensureNotionSchema(notion);
+          const obj = JSON.parse(analysisJsonStr);
+          const linkSnake = typeof obj['ссылка_на_оригинальное_тз'] === 'string' ? obj['ссылка_на_оригинальное_тз'] : '';
+          if (originalUrl && !linkSnake) obj['ссылка_на_оригинальное_тз'] = originalUrl;
+          analysisJsonStr = JSON.stringify(obj);
+        } catch {}
+        // Save to the pre-created file
+        fs.writeFileSync(outPath, analysisJsonStr, "utf-8");
 
-          // Parse again for properties
-          let parsed = {}; try { parsed = JSON.parse(analysisJsonStr); } catch {}
-          const norm = {}; Object.entries(parsed || {}).forEach(([k, v]) => { norm[String(k).toLowerCase().replace(/\s+/g, "_")] = v; });
+        // 2) Notion export
+        if (NOTION_TOKEN && NOTION_DATABASE_ID) {
+          try {
+            const statusFile = `${STATUS_DIR}/${safeName}.json`;
+            fs.writeFileSync(statusFile, JSON.stringify({ status: "processing" }));
+            const notion = new NotionClient({ auth: NOTION_TOKEN });
+            await ensureNotionSchema(notion);
 
-          // Title = заказчик
-          let titleText = '';
-          const customer = norm['наименование_компании_заказчика'] ?? norm['заказчик'];
-          if (Array.isArray(customer)) titleText = customer.filter(Boolean)[0] || '';
-          else if (typeof customer === 'string') titleText = customer;
-          titleText = normalizeCompanyName(titleText || properName);
+            // Parse for properties
+            let parsed = {}; try { parsed = JSON.parse(analysisJsonStr); } catch {}
+            const norm = {}; Object.entries(parsed || {}).forEach(([k, v]) => { norm[String(k).toLowerCase().replace(/\s+/g, "_")] = v; });
+            let titleText = '';
+            const customer = norm['наименование_компании_заказчика'] ?? norm['заказчик'];
+            if (Array.isArray(customer)) titleText = customer.filter(Boolean)[0] || '';
+            else if (typeof customer === 'string') titleText = customer;
+            titleText = normalizeCompanyName(titleText || properName);
+            const descrProp = typeof norm["описание_документа"] === "string" ? norm["описание_документа"] : "";
+            const linkProp0 = typeof norm["ссылка_на_оригинальное_тз"] === "string" ? norm["ссылка_на_оригинальное_тз"] : "";
+            const finalLink = linkProp0 || originalUrl || "";
 
-          const descrProp = typeof norm["описание_документа"] === "string" ? norm["описание_документа"] : "";
-          const linkProp0 = typeof norm["ссылка_на_оригинальное_тз"] === "string" ? norm["ссылка_на_оригинальное_тз"] : "";
-          const finalLink = linkProp0 || originalUrl || "";
+            const pageProps = {
+              Name: { title: [{ text: { content: titleText.slice(0, 200) } }] },
+              "Дата загрузки": { date: { start: new Date().toISOString() } },
+              "Тип документа": { select: { name: mimetype.includes("pdf") ? "PDF" : "DOCX" } },
+              Статус: { select: { name: "Новый" } },
+            };
+            if (descrProp) pageProps["Описание"] = { rich_text: [{ text: { content: String(descrProp).slice(0, 1900) } }] };
+            if (finalLink) pageProps["Ссылки и файлы"] = { files: [ { name: properName, external: { url: finalLink } } ] };
 
-          const pageProps = {
-            Name: { title: [{ text: { content: titleText.slice(0, 200) } }] },
-            "Дата загрузки": { date: { start: new Date().toISOString() } },
-            "Тип документа": { select: { name: mimetype.includes("pdf") ? "PDF" : "DOCX" } },
-            Статус: { select: { name: "Новый" } },
-          };
-          if (descrProp) pageProps["Описание"] = { rich_text: [{ text: { content: String(descrProp).slice(0, 1900) } }] };
-          if (finalLink) pageProps["Ссылки и файлы"] = { files: [ { name: properName, external: { url: finalLink } } ] };
-
-          // Build content blocks with summary at top
-          const blocks = buildNotionBlocksFromAnalysis(analysisJsonStr);
-
-          // Create page with first portion of blocks (avoid 100-block limit)
-          const first = blocks.slice(0, 50);
-          const rest = blocks.slice(50);
-          const page = await notion.pages.create({ parent: { database_id: NOTION_DATABASE_ID }, properties: pageProps, children: first });
-
-          // Append remaining blocks in batches of 90
-          for (let i = 0; i < rest.length; i += 90) {
-            const slice = rest.slice(i, i + 90);
-            try { await notion.blocks.children.append({ block_id: page.id, children: slice }); } catch (e) { console.warn('notion_append_failed', e?.message); }
+            const blocks = buildNotionBlocksFromAnalysis(analysisJsonStr);
+            const first = blocks.slice(0, 50);
+            const rest = blocks.slice(50);
+            const page = await notion.pages.create({ parent: { database_id: NOTION_DATABASE_ID }, properties: pageProps, children: first });
+            for (let i = 0; i < rest.length; i += 90) {
+              const slice = rest.slice(i, i + 90);
+              try { await notion.blocks.children.append({ block_id: page.id, children: slice }); } catch {}
+            }
+            if (originalUrl) {
+              try { await notion.blocks.children.append({ block_id: page.id, children: [ { object: 'block', type: 'file', file: { type: 'external', external: { url: originalUrl } } } ] }); } catch {}
+            }
+            try { await notion.pages.update({ page_id: page.id, properties: { Статус: { select: { name: "Готово" } } } }); } catch {}
+            const pageUrl = `https://www.notion.so/${String(page.id).replace(/-/g,'')}`;
+            fs.writeFileSync(statusFile, JSON.stringify({ status: "success", pageId: page.id, pageUrl }));
+          } catch (notionErr) {
+            const statusFile = `${STATUS_DIR}/${safeName}.json`;
+            fs.writeFileSync(statusFile, JSON.stringify({ status: "error", message: notionErr.message }));
           }
-
-          // Attach original file if present
-          if (originalUrl) {
-            try {
-              await notion.blocks.children.append({ block_id: page.id, children: [ { object: 'block', type: 'file', file: { type: 'external', external: { url: originalUrl } } } ] });
-            } catch {}
-          }
-
-          try { await notion.pages.update({ page_id: page.id, properties: { Статус: { select: { name: "Готово" } } } }); } catch {}
-          const pageUrl = `https://www.notion.so/${String(page.id).replace(/-/g,'')}`;
-          fs.writeFileSync(statusFile, JSON.stringify({ status: "success", pageId: page.id, pageUrl }));
-        } catch (notionErr) {
-          console.error("Notion export error", notionErr);
-          const statusFile = `${STATUS_DIR}/${filename}.json`;
-          fs.writeFileSync(statusFile, JSON.stringify({ status: "error", message: notionErr.message }));
         }
-      })();
-    }
-
-    if (req.file?.path) { fs.unlink(req.file.path, () => {}); }
+      } catch (e) {
+        // Write error into file
+        try { fs.writeFileSync(outPath, JSON.stringify({ error: e.message }), "utf-8"); } catch {}
+      } finally {
+        // Cleanup temp upload file
+        if (req.file?.path) { fs.unlink(req.file.path, () => {}); }
+      }
+    })();
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
