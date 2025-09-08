@@ -61,7 +61,7 @@
     .hidden { display:none; }
     #analyze-btn { margin-top:1.5rem; width:100%; background:var(--accent); color:#fff; border:none; padding:0.9rem 1rem; font-size:1rem; font-weight:600; border-radius:25px; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.08); transition:background 0.2s,transform 0.1s; }
     #analyze-btn:hover{background:#0047d0;}
-    #analyze-btn:active{transform:translateY(1px);}
+    #analyze-btn:active{transform:translateY(1px);}    
     #analysis-content { background:#fff; border:1px solid var(--border); border-radius:8px; padding:1.5rem; margin-top:1.5rem; min-height:300px; }
     #analysis-content h3 { margin:1rem 0 0.25rem; font-size:1rem; font-weight:600; }
     #analysis-content ul { padding-left:1.25rem; }
@@ -69,6 +69,12 @@
     #toast { position:fixed; right:1rem; bottom:1rem; background:#333; color:#fff; padding:1rem 1.25rem; border-radius:6px; opacity:0; transition:opacity 0.3s; font-size:0.9rem; }
     #progress { width:100%; height:6px; background:var(--border); border-radius:4px; overflow:hidden; margin-top:1rem; }
     #progress .bar { width:0%; height:100%; background:var(--accent); transition:width .3s ease; }
+
+    /* Banner action button states */
+    #banner-action{ color:#fff; border:none; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.15); }
+    #banner-action:hover{ background:#1a57ff !important; }
+    #banner-action:active{ transform:translateY(1px); }
+    #banner-action:focus{ outline:2px solid rgba(26,87,255,0.4); outline-offset:2px; }
   </style>
 </head>
 <body>
