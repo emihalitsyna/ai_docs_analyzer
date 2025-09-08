@@ -1,3 +1,4 @@
+
 // api/analysis.js
 import fs from "fs";
 import path from "path";
@@ -10,43 +11,42 @@ import {
   CHUNK_OVERLAP,
 } from "../config.js";
 
-export const SYSTEM_PROMPT = `Ты эксперт по тендерам и аналитик требований.
-Цель: провести детальный, но компактный анализ. Строго опирайся на текст документа и знания о Dbrain (если они даны). Если информации нет — верни пустые поля.
+export const SYSTEM_PROMPT = `Ты эксперт по тендерной документации и аналитик требований.
+Твоя задача — провести полный анализ всего документа целиком, не ограничиваясь частями.
+Извлеки из документа всю значимую информацию и оформи её в удобочитаемом виде, чтобы результат можно было сразу поместить в карточку Notion.
 
-Требования к разделу "описание_документа":
-- Дай 3–4 предложения о самом проекте (контекст, цель внедрения, ключевые ограничения).
-- В конце описания кратко перечисли ключевые требования одной-двумя фразами (свод).
+СТРОГО используй следующие разделы и их заголовки (1–7) в указанном порядке.
+Не используй технические форматы (JSON, Markdown, разметку). Просто верни чистый текст со списками.
+Если информации по разделу нет — оставь этот раздел пустым.
 
-Раздел "требуемые_доработки":
-- Сначала сравни требования из документа с возможностями Dbrain из предоставленного KB.
-- Включай сюда только то, чего НЕТ в KB Dbrain (или явно ограничено), без предположений.
+1. Описание проекта
+Кратко укажи, что это за проект, для кого он предназначен и с какой целью.
 
-Верни ЧИСТЫЙ JSON-объект (без пояснений и форматирования кода) следующей структуры и с этими ключами:
-{
-  "наименование_компании_заказчика": string | string[],
-  "описание_документа": string,
-  "ссылка_на_оригинальное_тз": string,
-  "контактные_лица": [ { "фио": string, "роль": string, "email": string, "телефон": string } ],
+2. Типы документов на обработку
+Перечисли, какие документы или данные требуется обрабатывать.
 
-  "технические_требования": [ { "описание": string, "цитата": string } ],
-  "функциональные_требования": [ { "описание": string, "цитата": string } ],
-  "нефункциональные_требования": [ { "описание": string, "цитата": string } ],
-  "инфраструктурные_требования": [ { "описание": string, "цитата": string } ],
-  "ограничения_и_риски": [ { "описание": string, "цитата": string } ],
+3. Требования
+Представь списками по группам:
+- Технические требования
+- Функциональные требования
+- Нефункциональные требования
+- Инфраструктурные требования
+- Ограничения и риски
 
-  "необходимые_документы_и_поля": [ { "документ": string, "поля": string[] } ],
+4. Список необходимых доработок
+Сравни выявленные требования с возможностями продукта Dbrain (используй документацию Dbrain, если она доступна).
+Укажи, какие пункты уже покрываются, какие требуют доработок, а какие не реализуются в текущем виде.
 
-  "требуемые_доработки": [ { "описание": string, "приоритет": "Высокий" | "Средний" | "Низкий", "оценка_сложности": "L" | "M" | "H", "цитата": string } ],
+5. Контактные лица и способы связи
+Перечисли всех, кто указан в документе с указанием должностей, телефонов, e-mail.
 
-  "сопоставление_с_dbrain": [ { "требование": string, "статус": "Поддерживается" | "Частично" | "Не_поддерживается", "комментарий": string, "цитата": string } ]
-}
+6. Ссылки и файлы
+Укажи все ссылки и вложенные материалы, присутствующие в документе.
 
-Правила:
-- Если раздел присутствует — верни 6–12 осмысленных пунктов, где уместно; иначе — пустой массив/строку.
-- Все цитаты — дословные короткие фрагменты из документа.
-- Не выдумывай контакты/URL/соответствие Dbrain — оставляй пусто, если нет в тексте.`;
+7. Оригинал ТЗ
+Добавь отметку или ссылку на исходный файл ТЗ, который был загружен для анализа.`;
 
-const CHUNK_PROMPT_SUFFIX = `Ты видишь фрагмент большого документа. Извлеки ТОЛЬКО те данные, которые явно присутствуют в этом фрагменте. Не делай выводов по отсутствующим частям. Верни JSON ТОЧНО той же структуры, но оставляй пустые поля/массивы, если в этом фрагменте нет данных.`;
+const CHUNK_PROMPT_SUFFIX = `Ты видишь фрагмент большого документа. Обрабатывай только явную информацию из фрагмента. Возвращай текст в тех же разделах 1–7. Никаких JSON/Markdown.`;
 
 function readDbrainKB() {
   try {
@@ -63,7 +63,7 @@ function buildPromptWithKB(basePrompt) {
   const kb = readDbrainKB();
   if (!kb) return basePrompt;
   const kbText = JSON.stringify(kb);
-  return `${basePrompt}\n\nКонтекст о возможностях Dbrain (используй только для сопоставления и поиска доработок, не выдумывай факты):\n${kbText}`;
+  return `${basePrompt}\n\nПодсказка по возможностям Dbrain (используй только для пункта 4, без выдумывания фактов):\n${kbText}`;
 }
 
 function safeParseJson(possible) {
@@ -95,42 +95,17 @@ function mergeObjectItemArrays(a, b, key = 'описание', limit = 12) {
 }
 
 function reduceAnalyses(partials) {
-  const out = {};
+  // Для текстового формата просто конкатенируем разделы в порядке 1–7
+  const pick = (text) => (typeof text === 'string' ? text.trim() : '');
+  const join = (arr) => arr.filter(Boolean).join('\n');
+  const res = { one: [], two: [], three: [], four: [], five: [], six: [], seven: [] };
   for (const p of partials) {
-    if (!p || typeof p !== 'object') continue;
-    // simple string fields
-    if (!out["описание_документа"] && p["описание_документа"]) out["описание_документа"] = p["описание_документа"];
-    if (!out["ссылка_на_оригинальное_тз"] && p["ссылка_на_оригинальное_тз"]) out["ссылка_на_оригинальное_тз"] = p["ссылка_на_оригинальное_тз"];
-    if (!out["наименование_компании_заказчика"] && p["наименование_компании_заказчика"]) out["наименование_компании_заказчика"] = p["наименование_компании_заказчика"];
-
-    // arrays of objects
-    out["технические_требования"] = mergeObjectItemArrays(out["технические_требования"], p["технические_требования"]);
-    out["функциональные_требования"] = mergeObjectItemArrays(out["функциональные_требования"], p["функциональные_требования"]);
-    out["нефункциональные_требования"] = mergeObjectItemArrays(out["нефункциональные_требования"], p["нефункциональные_требования"]);
-    out["инфраструктурные_требования"] = mergeObjectItemArrays(out["инфраструктурные_требования"], p["инфраструктурные_требования"]);
-    out["ограничения_и_риски"] = mergeObjectItemArrays(out["ограничения_и_риски"], p["ограничения_и_риски"]);
-
-    // contacts
-    out["контактные_лица"] = mergeObjectItemArrays(out["контактные_лица"], p["контактные_лица"], 'фио');
-
-    // docs and fields
-    if (Array.isArray(p["необходимые_документы_и_поля"])) {
-      const current = Array.isArray(out["необходимые_документы_и_поля"]) ? out["необходимые_документы_и_поля"] : [];
-      const merged = [...current];
-      const keyOf = (d) => (d && typeof d === 'object') ? (d.документ || d.название || d.name || JSON.stringify(d)) : String(d);
-      const index = new Map(current.map((d) => [keyOf(d), d]));
-      for (const d of p["необходимые_документы_и_поля"]) {
-        const k = keyOf(d);
-        if (!index.has(k)) { index.set(k, d); merged.push(d); }
-      }
-      out["необходимые_документы_и_поля"] = merged.slice(0, 20);
-    }
-
-    // do-works and mapping
-    out["требуемые_доработки"] = mergeObjectItemArrays(out["требуемые_доработки"], p["требуемые_доработки"]);
-    out["сопоставление_с_dbrain"] = mergeObjectItemArrays(out["сопоставление_с_dbrain"], p["сопоставление_с_dbrain"], 'требование');
+    const s = pick(p);
+    if (!s) continue;
+    // не зная структуры, просто добавим
+    res.one.push(s);
   }
-  return out;
+  return join([join(res.one), join(res.two), join(res.three), join(res.four), join(res.five), join(res.six), join(res.seven)]);
 }
 
 export default async function analyzeDocument(text, originalName) {
@@ -141,8 +116,8 @@ export default async function analyzeDocument(text, originalName) {
       { role: "system", content: PROMPT },
       { role: "user", content: text },
     ];
-    const jsonStr = await chatCompletion(messages);
-    return jsonStr;
+    const out = await chatCompletion(messages);
+    return out;
   }
 
   // Full-document map-reduce across all chunks (no Vector Store)
@@ -158,22 +133,12 @@ export default async function analyzeDocument(text, originalName) {
     ];
     try {
       const resp = await chatCompletion(messages);
-      const obj = safeParseJson(resp);
-      if (obj) partials.push(obj);
+      partials.push(resp);
     } catch {}
   }
 
   const reduced = reduceAnalyses(partials);
-  try {
-    const messages = [
-      { role: "system", content: PROMPT },
-      { role: "user", content: `Сведи воедино и верни ЧИСТЫЙ JSON той же структуры из следующего результата: ${JSON.stringify(reduced)}` },
-    ];
-    const finalJson = await chatCompletion(messages);
-    return finalJson;
-  } catch {
-    return JSON.stringify(reduced);
-  }
+  return reduced || partials.join('\n');
 }
 
 export function saveAnalysis(jsonStr, originalName) {
