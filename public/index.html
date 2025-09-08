@@ -351,7 +351,15 @@
         try{
           const r = await fetch(`/api/notion-status/${encodeURIComponent(filename)}`);
           const s = await r.json();
-          if(s.status==='success' || s.status==='error'){ setNotionChip(s); if(s.status==='success' && s.pageUrl){ showBanner('Страница в Notion создана','Открыть', s.pageUrl); } return; }
+          if(s.status==='success' || s.status==='error'){
+            setNotionChip(s);
+            if(s.status==='success'){
+              if(s.pageUrl){ showBanner('Страница в Notion создана','Открыть', s.pageUrl); }
+              // Попробуем догрузить и отрисовать анализ
+              if(filename){ const ready = await waitForAnalysisReady(filename); if(ready){ renderAnalysis(ready); } }
+            }
+            return;
+          }
         }catch{}
         await new Promise(r=>setTimeout(r,1000));
       }
@@ -359,17 +367,16 @@
     }
 
     async function waitForAnalysisReady(filename){
-      for(let i=0;i<60;i++){ // до ~60с
+      for(let i=0;i<180;i++){ // до ~180с
         try{
           const r = await fetch(`/api/analyses/${encodeURIComponent(filename)}`);
+          if(!r.ok){ await new Promise(rs=>setTimeout(rs,1000)); continue; }
           const txt = await r.text();
+          if(/Not found/i.test(txt)){ await new Promise(rs=>setTimeout(rs,1000)); continue; }
           try{
             const obj = JSON.parse(txt);
             if(obj && obj.status==='processing'){ await new Promise(rs=>setTimeout(rs,1000)); continue; }
-          }catch{
-            // если не JSON — попробуем распарсить как раньше; считаем, что готово
-            return txt;
-          }
+          }catch{ /* not json -> treat as ready */ }
           return txt;
         }catch{}
         await new Promise(rs=>setTimeout(rs,1000));
