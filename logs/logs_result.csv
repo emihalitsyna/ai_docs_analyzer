@@ -1,0 +1,102 @@
+"TimeUTC","timestampInMs","requestPath","requestMethod","requestQueryString","responseStatusCode","requestId","requestUserAgent","level","environment","branch","vercelCache","type","function","host","deploymentDomain","deploymentId","durationMs","region","maxMemoryUsed","memorySize","message","projectId","traceId","sessionId","invocationId","instanceId","concurrency"
+"2025-09-02 13:43:59",1756820639448,"ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app/api/upload","POST","",-1,"cd4mp-1756820628882-b0ea9340ac3c","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15","error","production","main","","lambda","/api/server.js","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","dpl_9Fkxbq2ZaHSU55UhodubdCBhoKFt",-1,"iad1",-1,-1,"BadRequestError: 400 Unknown parameter: 'max_output_tokens'.
+    at APIError.generate (file:///var/task/node_modules/openai/core/error.mjs:41:20)
+    at OpenAI.makeStatusError (file:///var/task/node_modules/openai/client.mjs:158:32)
+    at OpenAI.makeRequest (file:///var/task/node_modules/openai/client.mjs:303:30)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async Runs.createAndPoll (file:///var/task/node_modules/openai/resources/beta/threads/runs/runs.mjs:83:21)
+    at async askWithVS (file:///var/task/api/retrieval.js:52:17)
+    at async analyzeDocument (file:///var/task/api/analysis.js:36:27)
+    at async file:///var/task/api/server.js:214:25 {
+  status: 400,
+  headers: Headers {
+    date: 'Tue, 02 Sep 2025 13:43:59 GMT',
+    'content-type': 'application/json',
+    'content-length': '181',
+    connection: 'keep-alive',
+    'openai-version': '2020-10-01',
+    'openai-organization': 'dbrain-kohjlo',
+    'openai-project': 'proj_WQst2eYeeWvxj2kiKRNH1fJC',
+    'x-request-id': 'req_51d0f4893698c6a038818729f413b374',
+    'openai-processing-ms': '61',
+    'x-envoy-upstream-service-time': '97',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains; preload',
+    'cf-cache-status': 'DYNAMIC',
+    'set-cookie': '__cf_bm=ew9sM4Sfez.h1fSJsMy7LPFhy72yfM5XelHfcr8rE3c-1756820639-1.0.1.1-NkQTFz78nAys.ZHGzXXbj4fgpxF.wwIltHxPHQ6tyfVmZ9ZULWg4KVzeR0BgvP28JXJ5ODRxl1u73wgXPLBNF5QbTEFnX0gJyTdA47CIDuE; path=/; expires=Tue, 02-Sep-25 14:13:59 GMT; domain=.api.openai.com; HttpOnly; Secure; SameSite=None, _cfuvid=2cwdbXi7bWb9kOMMapVHPyrDS8lOzOPa2pcrbDcT5qo-1756820639442-0.0.1.1-604800000; path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None',
+    'x-content-type-options': 'nosniff',
+    server: 'cloudflare',
+    'cf-ray': '978d70836efcd6a1-IAD',
+    'alt-svc': 'h3="":443""; ma=86400'
+  },
+  requestID: 'req_51d0f4893698c6a038818729f413b374',
+  error: {
+    message: ""Unknown parameter: 'max_output_tokens'."",
+    type: 'invalid_request_error',
+    param: 'max_output_tokens',
+    code: 'unknown_parameter'
+  },
+  code: 'unknown_parameter',
+  param: 'max_output_tokens',
+  type: 'invalid_request_error'
+}","prj_fiD4bk9P6G49I3b2v1HMr3zpTXTR","","","01K45APSYFR6Y0VM2YSVMQYWHG","",-1
+"2025-09-02 13:43:49",1756820629206,"ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app/api/upload","POST","",500,"cd4mp-1756820628882-b0ea9340ac3c","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15","error","production","main","","lambda","/api/server.js","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","dpl_9Fkxbq2ZaHSU55UhodubdCBhoKFt",9977,"iad1",133,2048,"","prj_fiD4bk9P6G49I3b2v1HMr3zpTXTR","","","01K45APSYFR6Y0VM2YSVMQYWHG","CXfeVcfr9qU4",1
+"2025-09-02 13:43:39",1756820619570,"ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app/api/analyses","GET","",-1,"8xht2-1756820619482-57ceb313b225","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15","info","production","main","","lambda","/api/server.js","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","dpl_9Fkxbq2ZaHSU55UhodubdCBhoKFt",-1,"iad1",-1,-1,"[dotenv@17.2.1] injecting env (0) from .env -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }","prj_fiD4bk9P6G49I3b2v1HMr3zpTXTR","","","01K45APG8JYD44N2ES8RPRWKZ4","",-1
+"2025-09-02 13:43:39",1756820619538,"ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app/api/analyses","GET","",200,"8xht2-1756820619482-57ceb313b225","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15","info","production","main","","lambda","/api/server.js","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","dpl_9Fkxbq2ZaHSU55UhodubdCBhoKFt",36,"iad1",117,2048,"","prj_fiD4bk9P6G49I3b2v1HMr3zpTXTR","","","01K45APG8JYD44N2ES8RPRWKZ4","CXfeVcfr9qU4",1
+"2025-09-02 13:43:39",1756820619524,"ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app/api/status","GET","",200,"8xht2-1756820619475-419ff7600e93","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15","info","production","main","","lambda","/api/server.js","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","dpl_9Fkxbq2ZaHSU55UhodubdCBhoKFt",26,"iad1",133,2048,"","prj_fiD4bk9P6G49I3b2v1HMr3zpTXTR","","","01K45APG84R84JRJSD5TG57YB0","XjLJKJT4g9KS",1
+"2025-09-02 13:41:50",1756820510805,"ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app/api/upload","POST","",-1,"kwkf6-1756820498709-01cfb61557ae","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15","error","production","main","","lambda","/api/server.js","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","dpl_9Fkxbq2ZaHSU55UhodubdCBhoKFt",-1,"iad1",-1,-1,"BadRequestError: 400 Unknown parameter: 'max_output_tokens'.
+    at APIError.generate (file:///var/task/node_modules/openai/core/error.mjs:41:20)
+    at OpenAI.makeStatusError (file:///var/task/node_modules/openai/client.mjs:158:32)
+    at OpenAI.makeRequest (file:///var/task/node_modules/openai/client.mjs:303:30)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async Runs.createAndPoll (file:///var/task/node_modules/openai/resources/beta/threads/runs/runs.mjs:83:21)
+    at async askWithVS (file:///var/task/api/retrieval.js:52:17)
+    at async analyzeDocument (file:///var/task/api/analysis.js:36:27)
+    at async file:///var/task/api/server.js:214:25 {
+  status: 400,
+  headers: Headers {
+    date: 'Tue, 02 Sep 2025 13:41:50 GMT',
+    'content-type': 'application/json',
+    'content-length': '181',
+    connection: 'keep-alive',
+    'openai-version': '2020-10-01',
+    'openai-organization': 'dbrain-kohjlo',
+    'openai-project': 'proj_WQst2eYeeWvxj2kiKRNH1fJC',
+    'x-request-id': 'req_609456590de3834b21b79e2aaa5d5e77',
+    'openai-processing-ms': '33',
+    'x-envoy-upstream-service-time': '36',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains; preload',
+    'cf-cache-status': 'DYNAMIC',
+    'set-cookie': '__cf_bm=qHeyZFeQUak6bAVArx3yD1XpOT6NApQWZcHLk287OjI-1756820510-1.0.1.1-RNSmcVA7Y9I5INmUGOWmewFYOACx.T2_IJ6oCZuZpInCE9Qr0INIae.9TDpRdk4.YQsIyYZDeYRbYubnurW1_1KOFCkTPhHdlwTsMKfil9o; path=/; expires=Tue, 02-Sep-25 14:11:50 GMT; domain=.api.openai.com; HttpOnly; Secure; SameSite=None, _cfuvid=70qdHOSL1s0BPuZjkb24Ae1Kl6R.1f4oRUbUiPrwfoo-1756820510799-0.0.1.1-604800000; path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None',
+    'x-content-type-options': 'nosniff',
+    server: 'cloudflare',
+    'cf-ray': '978d6d5fd984d67f-IAD',
+    'alt-svc': 'h3="":443""; ma=86400'
+  },
+  requestID: 'req_609456590de3834b21b79e2aaa5d5e77',
+  error: {
+    message: ""Unknown parameter: 'max_output_tokens'."",
+    type: 'invalid_request_error',
+    param: 'max_output_tokens',
+    code: 'unknown_parameter'
+  },
+  code: 'unknown_parameter',
+  param: 'max_output_tokens',
+  type: 'invalid_request_error'
+}","prj_fiD4bk9P6G49I3b2v1HMr3zpTXTR","","","01K45AJVNXT33XA5PQH6D5B6CE","",-1
+"2025-09-02 13:41:39",1756820499824,"ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app/api/upload","POST","",500,"kwkf6-1756820498709-01cfb61557ae","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15","error","production","main","","lambda","/api/server.js","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","dpl_9Fkxbq2ZaHSU55UhodubdCBhoKFt",10634,"iad1",133,2048,"","prj_fiD4bk9P6G49I3b2v1HMr3zpTXTR","","","01K45AJVNXT33XA5PQH6D5B6CE","XjLJKJT4g9KS",1
+"2025-09-02 13:41:16",1756820476700,"ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app/api/status","GET","",-1,"c2tcv-1756820476502-c9ab9f4f50fc","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15","info","production","main","","lambda","/api/server.js","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","dpl_9Fkxbq2ZaHSU55UhodubdCBhoKFt",-1,"iad1",-1,-1,"[dotenv@17.2.1] injecting env (0) from .env -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com","prj_fiD4bk9P6G49I3b2v1HMr3zpTXTR","","","01K45AJ4RAYYAYNXSWDTCMWGB5","",-1
+"2025-09-02 13:41:16",1756820476683,"ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app/api/analyses","GET","",200,"qt6v6-1756820476502-c7d6751c0c6a","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15","info","production","main","","lambda","/api/server.js","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","dpl_9Fkxbq2ZaHSU55UhodubdCBhoKFt",6,"iad1",120,2048,"","prj_fiD4bk9P6G49I3b2v1HMr3zpTXTR","","","01K45AJ4RBN72Q9JX1EQWSB8MT","XjLJKJT4g9KS",1
+"2025-09-02 13:41:16",1756820476682,"ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app/api/status","GET","",200,"c2tcv-1756820476502-c9ab9f4f50fc","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15","info","production","main","","lambda","/api/server.js","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","dpl_9Fkxbq2ZaHSU55UhodubdCBhoKFt",16,"iad1",120,2048,"","prj_fiD4bk9P6G49I3b2v1HMr3zpTXTR","","","01K45AJ4RAYYAYNXSWDTCMWGB5","XjLJKJT4g9KS",1
+"2025-09-02 13:41:09",1756820469884,"ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app/api/status","GET","",-1,"g6h7s-1756820469148-75012f7378c7","vercel-screenshot/1.0","info","production","main","","lambda","/api/server.js","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","dpl_9Fkxbq2ZaHSU55UhodubdCBhoKFt",-1,"iad1",-1,-1,"[dotenv@17.2.1] injecting env (0) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild","prj_fiD4bk9P6G49I3b2v1HMr3zpTXTR","","","01K45AHXE51JSWHQJMP4DDBV1M","",-1
+"2025-09-02 13:41:09",1756820469327,"ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app/api/analyses","GET","",200,"4d9zk-1756820469287-529239b34024","vercel-screenshot/1.0","info","production","main","","lambda","/api/server.js","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","dpl_9Fkxbq2ZaHSU55UhodubdCBhoKFt",5,"iad1",131,2048,"","prj_fiD4bk9P6G49I3b2v1HMr3zpTXTR","","","01K45AHXJF98P2P9TM3CC2V04S","YLLY2GoRuats",1
+"2025-09-02 13:41:09",1756820469320,"ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app/api/status","GET","",200,"zvnnb-1756820469281-050fca42b8fb","vercel-screenshot/1.0","info","production","main","","lambda","/api/server.js","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","dpl_9Fkxbq2ZaHSU55UhodubdCBhoKFt",8,"iad1",131,2048,"","prj_fiD4bk9P6G49I3b2v1HMr3zpTXTR","","","01K45AHXJ8DJGE6YH0TAV75TN2","YLLY2GoRuats",1
+"2025-09-02 13:41:09",1756820469189,"ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app/api/status","GET","",200,"g6h7s-1756820469148-75012f7378c7","vercel-screenshot/1.0","info","production","main","","lambda","/api/server.js","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","dpl_9Fkxbq2ZaHSU55UhodubdCBhoKFt",45,"iad1",117,2048,"","prj_fiD4bk9P6G49I3b2v1HMr3zpTXTR","","","01K45AHXE51JSWHQJMP4DDBV1M","EGt5Q5CKoZ7R",1
+"2025-09-02 13:41:09",1756820469188,"ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app/api/analyses","GET","",200,"9rwgq-1756820469150-21f37828a0dc","vercel-screenshot/1.0","info","production","main","","lambda","/api/server.js","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","dpl_9Fkxbq2ZaHSU55UhodubdCBhoKFt",5,"iad1",131,2048,"","prj_fiD4bk9P6G49I3b2v1HMr3zpTXTR","","","01K45AHXE4K5AA1SYDENDXNJEM","YLLY2GoRuats",1
+"2025-09-02 13:41:08",1756820468936,"ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app/api/status","GET","",-1,"9rwgq-1756820468772-fb6ea12bca1d","vercel-screenshot/1.0","info","production","main","","lambda","/api/server.js","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","dpl_9Fkxbq2ZaHSU55UhodubdCBhoKFt",-1,"iad1",-1,-1,"[dotenv@17.2.1] injecting env (0) from .env -- tip: 📡 observe env with Radar: https://dotenvx.com/radar","prj_fiD4bk9P6G49I3b2v1HMr3zpTXTR","","","01K45AHX5KJZ8A0K1ZHPRD0ZAT","",-1
+"2025-09-02 13:41:08",1756820468917,"ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app/api/analyses","GET","",200,"xhfnm-1756820468770-9a992e3f5e92","vercel-screenshot/1.0","info","production","main","","lambda","/api/server.js","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","dpl_9Fkxbq2ZaHSU55UhodubdCBhoKFt",5,"iad1",131,2048,"","prj_fiD4bk9P6G49I3b2v1HMr3zpTXTR","","","01K45AHX5NE6X2MVSTY861JHAP","YLLY2GoRuats",1
+"2025-09-02 13:41:08",1756820468915,"ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app/api/status","GET","",200,"9rwgq-1756820468772-fb6ea12bca1d","vercel-screenshot/1.0","info","production","main","","lambda","/api/server.js","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","ai-docs-analyzer-g8w0tg5kx-evgenias-projects-8a10f913.vercel.app","dpl_9Fkxbq2ZaHSU55UhodubdCBhoKFt",115,"iad1",131,2048,"","prj_fiD4bk9P6G49I3b2v1HMr3zpTXTR","","","01K45AHX5KJZ8A0K1ZHPRD0ZAT","YLLY2GoRuats",1
+"2025-09-02 13:18:57",1756819137592,"ai-docs-analyzer-nlqbu3otg-evgenias-projects-8a10f913.vercel.app/api/analyses","GET","",200,"j7vt7-1756819137552-782c784b4a00","vercel-screenshot/1.0","info","production","main","","lambda","/api/server.js","ai-docs-analyzer-nlqbu3otg-evgenias-projects-8a10f913.vercel.app","ai-docs-analyzer-nlqbu3otg-evgenias-projects-8a10f913.vercel.app","dpl_ATNFZHmBVL9dSdJSJEvk8RDqGdvE",6,"iad1",130,2048,"","prj_fiD4bk9P6G49I3b2v1HMr3zpTXTR","","","01K459991R9RQDQZRQS6GPJMV1","MVOnKmyGH6tt",1
+"2025-09-02 13:18:57",1756819137573,"ai-docs-analyzer-nlqbu3otg-evgenias-projects-8a10f913.vercel.app/api/status","GET","",-1,"k474f-1756819137391-de5f037c1c74","vercel-screenshot/1.0","info","production","main","","lambda","/api/server.js","ai-docs-analyzer-nlqbu3otg-evgenias-projects-8a10f913.vercel.app","ai-docs-analyzer-nlqbu3otg-evgenias-projects-8a10f913.vercel.app","dpl_ATNFZHmBVL9dSdJSJEvk8RDqGdvE",-1,"iad1",-1,-1,"[dotenv@17.2.1] injecting env (0) from .env -- tip: ⚙️  suppress all logs with { quiet: true }","prj_fiD4bk9P6G49I3b2v1HMr3zpTXTR","","","01K459990BG6ENM0VEYVMAVV55","",-1
+"2025-09-02 13:18:57",1756819137556,"ai-docs-analyzer-nlqbu3otg-evgenias-projects-8a10f913.vercel.app/api/status","GET","",200,"kxphz-1756819137515-525b89295683","vercel-screenshot/1.0","info","production","main","","lambda","/api/server.js","ai-docs-analyzer-nlqbu3otg-evgenias-projects-8a10f913.vercel.app","ai-docs-analyzer-nlqbu3otg-evgenias-projects-8a10f913.vercel.app","dpl_ATNFZHmBVL9dSdJSJEvk8RDqGdvE",7,"iad1",130,2048,"","prj_fiD4bk9P6G49I3b2v1HMr3zpTXTR","","","01K459990MVE61F7V4M0M2SZN8","MVOnKmyGH6tt",1
+"2025-09-02 13:18:57",1756819137548,"ai-docs-analyzer-nlqbu3otg-evgenias-projects-8a10f913.vercel.app/api/analyses","GET","",200,"wjrx6-1756819137392-5441ce09c99f","vercel-screenshot/1.0","info","production","main","","lambda","/api/server.js","ai-docs-analyzer-nlqbu3otg-evgenias-projects-8a10f913.vercel.app","ai-docs-analyzer-nlqbu3otg-evgenias-projects-8a10f913.vercel.app","dpl_ATNFZHmBVL9dSdJSJEvk8RDqGdvE",6,"iad1",130,2048,"","prj_fiD4bk9P6G49I3b2v1HMr3zpTXTR","","","01K459990CY8T074CP9SDHZV40","MVOnKmyGH6tt",1
+"2025-09-02 13:18:57",1756819137547,"ai-docs-analyzer-nlqbu3otg-evgenias-projects-8a10f913.vercel.app/api/status","GET","",200,"k474f-1756819137391-de5f037c1c74","vercel-screenshot/1.0","info","production","main","","lambda","/api/server.js","ai-docs-analyzer-nlqbu3otg-evgenias-projects-8a10f913.vercel.app","ai-docs-analyzer-nlqbu3otg-evgenias-projects-8a10f913.vercel.app","dpl_ATNFZHmBVL9dSdJSJEvk8RDqGdvE",102,"iad1",130,2048,"","prj_fiD4bk9P6G49I3b2v1HMr3zpTXTR","","","01K459990BG6ENM0VEYVMAVV55","MVOnKmyGH6tt",1

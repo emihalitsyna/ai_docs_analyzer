@@ -293,11 +293,11 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
     // If Retrieval enabled, upload to Vector Store (diagnostic/optional)
     if (OPENAI_VECTOR_STORE) {
       try {
-        const { vectorStoreId, filesSummary } = await uploadFileToVS(filePath, properName, mimetype, OPENAI_VECTOR_STORE);
-        usedVectorStoreId = vectorStoreId;
-        retrievalFilesSummary = filesSummary || null;
+      const { vectorStoreId, filesSummary } = await uploadFileToVS(filePath, properName, mimetype, OPENAI_VECTOR_STORE);
+      usedVectorStoreId = vectorStoreId;
+      retrievalFilesSummary = filesSummary || null;
         console.info(JSON.stringify({ event: 'analysis_path', mode: 'retrieval+fulltext', assistant: !!OPENAI_ASSISTANT_ID, vectorStoreId, filename: properName, mimetype }));
-        if (filesSummary) console.info(JSON.stringify({ event: 'vector_store_files', vectorStoreId, ...filesSummary }));
+      if (filesSummary) console.info(JSON.stringify({ event: 'vector_store_files', vectorStoreId, ...filesSummary }));
       } catch (e) {
         console.warn('vector_store_error', e?.message);
       }
@@ -316,7 +316,7 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
     });
 
     // ---- Background work ----
-    (async () => {
+      (async () => {
       try {
         // 1) Extract full text and analyze
         const text = await extractText(filePath, mimetype);
@@ -333,13 +333,27 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
         // Save to the pre-created file
         fs.writeFileSync(outPath, analysisJsonStr, "utf-8");
 
+        // Also persist analysis to durable storage (Vercel Blob) for serverless environments
+        try {
+          if (BLOB_READ_WRITE_TOKEN) {
+            const { put } = await import('@vercel/blob');
+            await put(`analyses/${safeName}`, analysisJsonStr, {
+              access: 'public',
+              token: BLOB_READ_WRITE_TOKEN,
+              contentType: 'application/json; charset=utf-8'
+            });
+          }
+        } catch (e) {
+          console.warn('blob_upload_analysis_failed', e?.message || e);
+        }
+
         // 2) Notion export
         if (NOTION_TOKEN && NOTION_DATABASE_ID) {
           try {
             const statusFile = `${STATUS_DIR}/${safeName}.json`;
-            fs.writeFileSync(statusFile, JSON.stringify({ status: "processing" }));
-            const notion = new NotionClient({ auth: NOTION_TOKEN });
-            await ensureNotionSchema(notion);
+          fs.writeFileSync(statusFile, JSON.stringify({ status: "processing" }));
+          const notion = new NotionClient({ auth: NOTION_TOKEN });
+          await ensureNotionSchema(notion);
 
             // Parse for properties
             let parsed = {}; try { parsed = JSON.parse(analysisJsonStr); } catch {}
@@ -376,9 +390,9 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
             try { await notion.pages.update({ page_id: page.id, properties: { Статус: { select: { name: "Готово" } } } }); } catch {}
             const pageUrl = `https://www.notion.so/${String(page.id).replace(/-/g,'')}`;
             fs.writeFileSync(statusFile, JSON.stringify({ status: "success", pageId: page.id, pageUrl }));
-          } catch (notionErr) {
+        } catch (notionErr) {
             const statusFile = `${STATUS_DIR}/${safeName}.json`;
-            fs.writeFileSync(statusFile, JSON.stringify({ status: "error", message: notionErr.message }));
+          fs.writeFileSync(statusFile, JSON.stringify({ status: "error", message: notionErr.message }));
           }
         }
       } catch (e) {
@@ -387,8 +401,8 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
       } finally {
         // Cleanup temp upload file
         if (req.file?.path) { fs.unlink(req.file.path, () => {}); }
-      }
-    })();
+        }
+      })();
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -419,9 +433,9 @@ app.get("/api/analyses", async (req, res) => {
       }
     }
     // Local files history (fallback)
-    const dir = path.join("/tmp", "analysis_results");
+  const dir = path.join("/tmp", "analysis_results");
     if (fs.existsSync(dir)) {
-      const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json"));
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json"));
       files.sort((a,b)=>{
         const getTs = (name)=>{ const m=name.match(/_(\d+)\.json$/); return m?Number(m[1]):0; };
         return getTs(b)-getTs(a);
@@ -435,11 +449,30 @@ app.get("/api/analyses", async (req, res) => {
 });
 
 // Specific analysis endpoint
-app.get("/api/analyses/:file", (req, res) => {
+app.get("/api/analyses/:file", async (req, res) => {
   const filePath = path.join("/tmp", "analysis_results", req.params.file);
-  if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Not found" });
-  const data = fs.readFileSync(filePath, "utf-8");
-  res.type("application/json").send(data);
+  if (fs.existsSync(filePath)) {
+    const data = fs.readFileSync(filePath, "utf-8");
+    return res.type("application/json").send(data);
+  }
+  // Fallback to Blob storage if local temp is missing (serverless instance change)
+  try {
+    if (BLOB_READ_WRITE_TOKEN) {
+      const { list } = await import('@vercel/blob');
+      const result = await list({ prefix: `analyses/${req.params.file}`, token: BLOB_READ_WRITE_TOKEN, limit: 1 });
+      const blob = (result?.blobs || [])[0];
+      if (blob?.url) {
+        const resp = await fetch(blob.url);
+        if (resp.ok) {
+          const text = await resp.text();
+          return res.type("application/json").send(text);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('blob_fetch_analysis_failed', e?.message || e);
+  }
+  return res.status(404).json({ error: "Not found" });
 });
 
 // Endpoint to poll Notion export status
