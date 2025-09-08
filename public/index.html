@@ -367,6 +367,8 @@
     }
 
     async function waitForAnalysisReady(filename){
+      const container = document.getElementById('analysis-content');
+      container.textContent = 'Идёт анализ…';
       for(let i=0;i<180;i++){ // до ~180с
         try{
           const r = await fetch(`/api/analyses/${encodeURIComponent(filename)}`);
@@ -376,11 +378,13 @@
           try{
             const obj = JSON.parse(txt);
             if(obj && obj.status==='processing'){ await new Promise(rs=>setTimeout(rs,1000)); continue; }
+            if(obj && obj.error){ container.textContent = 'Ошибка анализа: ' + obj.error; return txt; }
           }catch{ /* not json -> treat as ready */ }
           return txt;
         }catch{}
         await new Promise(rs=>setTimeout(rs,1000));
       }
+      container.textContent = 'Анализ занимает больше обычного. Обновите страницу чуть позже.';
       return null;
     }
 
