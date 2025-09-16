@@ -114,7 +114,13 @@
           <p id="drop-prompt">Выберите файл или перетащите сюда</p>
           <div id="file-info" class="hidden"></div>
         </label>
-        <button id="analyze-btn" class="btn-primary" type="submit" disabled>Загрузить и проанализировать</button>
+        <div style="display:flex;align-items:center;gap:12px;justify-content:space-between;margin-top:0.5rem;">
+          <label style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="fulltext-checkbox" />
+            <span>Полный анализ текста</span>
+          </label>
+          <button id="analyze-btn" class="btn-primary" type="submit" disabled>Загрузить и проанализировать</button>
+        </div>
         <div id="progress" class="hidden"><div class="bar"></div></div>
       </form>
     </section>
@@ -438,6 +444,8 @@
       e.preventDefault();
       const form = e.target;
       const data = new FormData(form);
+      const fullCb = document.getElementById('fulltext-checkbox');
+      if (fullCb && fullCb.checked) { data.append('fullText','1'); }
       startProgress();
       try {
         const res = await fetch('/api/upload', { method: 'POST', body: data });

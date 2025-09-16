@@ -51,4 +51,19 @@ export async function chatCompletion(messages) {
   return text || "{}";
 }
 
+// New: per-call overrides for model/temperature/max_output_tokens
+export async function chatCompletionWithOpts(messages, opts = {}) {
+  if (!openai) throw new Error("OPENAI_API_KEY not configured");
+  const input = messages.map((m) => `${m.role.toUpperCase()}: ${m.content}`).join("\n\n");
+  const req = {
+    model: opts.model || OPENAI_MODEL,
+    input,
+  };
+  if (typeof opts.temperature === 'number') req.temperature = opts.temperature;
+  if (typeof opts.max_output_tokens === 'number') req.max_output_tokens = opts.max_output_tokens;
+  const response = await callResponsesWithRetry(req);
+  const text = response.output_text || response.output?.map?.(p=>p?.content?.map?.(c=>c?.text?.value||"").join("")).join("\n");
+  return text || "{}";
+}
+
 export default openai; 

@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import chunkText from "./chunker.js";
 import { embedChunks, chatCompletion } from "./openaiClient.js";
+import { chatCompletionWithOpts } from "./openaiClient.js";
 import { askWithVS } from "./retrieval.js";
 import { OPENAI_VECTOR_STORE, DBRAIN_KB_PATH } from "../config.js";
 import {
@@ -139,6 +140,17 @@ export default async function analyzeDocument(text, originalName) {
 
   const reduced = reduceAnalyses(partials);
   return reduced || partials.join('\n');
+}
+
+export async function analyzeDocumentFull(text, originalName){
+  const PROMPT = buildPromptWithKB(SYSTEM_PROMPT);
+  const messages = [
+    { role: "system", content: PROMPT },
+    { role: "user", content: text },
+  ];
+  // Full-text single-call analysis with GPT-5, temperature=1, no explicit token cap
+  const out = await chatCompletionWithOpts(messages, { model: 'gpt-5', temperature: 1 });
+  return out;
 }
 
 export function saveAnalysis(jsonStr, originalName) {

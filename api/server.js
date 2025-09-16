@@ -13,7 +13,7 @@ import {
 } from "../config.js";
 import extractText from "./extractText.js";
 import { uploadFileToVS } from "./retrieval.js";
-import analyzeDocument, { saveAnalysis } from "./analysis.js";
+import analyzeDocument, { analyzeDocumentFull, saveAnalysis } from "./analysis.js";
 import { Client as NotionClient } from "@notionhq/client";
 import os from "os";
 import cfgAll from "../config.js";
@@ -274,6 +274,7 @@ app.get("/api/status", (req, res) => {
 app.post("/api/upload", upload.single("document"), async (req, res) => {
   try {
     const { path: filePath, mimetype, originalname } = req.file;
+    const fullTextFlag = (req.body && (req.body.fullText === '1' || req.body.fullText === 'true')) ? true : false;
     // Fix filename mojibake (incoming latin1 -> utf8)
     let properName = Buffer.from(originalname, "latin1").toString("utf8");
     
@@ -312,15 +313,18 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
       retrieval: { vectorStore: usedVectorStoreId, assistant: OPENAI_ASSISTANT_ID ? true : false },
       retrievalFiles: retrievalFilesSummary,
       notion: { queued: !!(NOTION_TOKEN && NOTION_DATABASE_ID) },
-      upload: { blob: !!originalUrl, url: originalUrl }
+      upload: { blob: !!originalUrl, url: originalUrl },
+      mode: fullTextFlag ? 'full_text' : 'standard'
     });
 
     // ---- Background work ----
       (async () => {
       try {
-        // 1) Extract full text and analyze
+        // 1) Extract full text and analyze (branch by mode)
         const text = await extractText(filePath, mimetype);
-        let analysisJsonStr = await analyzeDocument(text, properName);
+        let analysisJsonStr = fullTextFlag
+          ? await analyzeDocumentFull(text, properName)
+          : await analyzeDocument(text, properName);
         // Normalize
         analysisJsonStr = normalizeJsonString(analysisJsonStr);
         // If Blob URL is available, inject it when link field is empty/missing
