@@ -32,6 +32,9 @@
     p, li, button, input, a, .status { font-size: 0.95rem; }
     ul { font-size: 0.95rem; }
     .status { margin-bottom: 1.5rem; }
+    /* Preview modal visibility control */
+    #preview-modal{ display:none; }
+    #preview-modal.show{ display:flex; }
     .chip {
       display:inline-flex;align-items:center;gap:4px;
       padding:2px 10px;border-radius:12px;
@@ -134,7 +137,7 @@
     <div id="toast"></div>
 
     <!-- Preview Modal -->
-    <div id="preview-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;">
+    <div id="preview-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;z-index:9999;">
       <div style="background:#fff;max-width:920px;width:92%;max-height:80vh;overflow:auto;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.2);">
         <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
           <div>
@@ -484,9 +487,9 @@
       const pretty = JSON.stringify(prevJson.messages, null, 2);
       body.textContent = pretty;
       sub.textContent = `Режим: ${prevJson.mode==='full_text'?'Полный текст':'Стандартный'} • Модель: gpt-5 • Температура: 1`;
-      modal.classList.remove('hidden');
+      modal.classList.add('show');
       // wire buttons
-      const close=()=>modal.classList.add('hidden');
+      const close=()=>modal.classList.remove('show');
       document.getElementById('preview-close').onclick=close;
       document.getElementById('preview-cancel').onclick=close;
       document.getElementById('preview-confirm').onclick=async()=>{
