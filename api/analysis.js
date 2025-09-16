@@ -60,7 +60,7 @@ function readDbrainKB() {
   return null;
 }
 
-function buildPromptWithKB(basePrompt) {
+export function buildPromptWithKB(basePrompt) {
   const kb = readDbrainKB();
   if (!kb) return basePrompt;
   const kbText = JSON.stringify(kb);

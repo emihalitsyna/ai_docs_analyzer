@@ -13,7 +13,7 @@ import {
 } from "../config.js";
 import extractText from "./extractText.js";
 import { uploadFileToVS } from "./retrieval.js";
-import analyzeDocument, { analyzeDocumentFull, saveAnalysis } from "./analysis.js";
+import analyzeDocument, { analyzeDocumentFull, saveAnalysis, buildPromptWithKB, SYSTEM_PROMPT } from "./analysis.js";
 import { Client as NotionClient } from "@notionhq/client";
 import os from "os";
 import cfgAll from "../config.js";
@@ -410,6 +410,38 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Preview endpoint: returns the exact messages that would be sent to the model
+app.post("/api/preview", upload.single("document"), async (req, res) => {
+  try {
+    const { path: filePath, mimetype, originalname } = req.file || {};
+    if (!filePath) return res.status(400).json({ error: "No file" });
+    const fullTextFlag = (req.body && (req.body.fullText === '1' || req.body.fullText === 'true')) ? true : false;
+    const text = await extractText(filePath, mimetype);
+    let messages;
+    const PROMPT = buildPromptWithKB(SYSTEM_PROMPT);
+    if (fullTextFlag) {
+      messages = [ { role: 'system', content: PROMPT }, { role: 'user', content: text } ];
+    } else {
+      // standard path: either whole text (short) or chunked (long). For preview, показываем кратко как пойдет первый запрос.
+      if (text.length < 15000) {
+        messages = [ { role: 'system', content: PROMPT }, { role: 'user', content: text } ];
+      } else {
+        // build first chunk preview
+        const CHUNK_SIZE = 1000; // same as config default; for precise, we could import
+        const CHUNK_OVERLAP = 100;
+        const first = text.slice(0, CHUNK_SIZE);
+        const suffix = `Ты видишь фрагмент большого документа. Обрабатывай только явную информацию из фрагмента. Возвращай текст в тех же разделах 1–7. Никаких JSON/Markdown.`;
+        messages = [ { role: 'system', content: `${PROMPT}\n\n${suffix}` }, { role: 'user', content: first } ];
+      }
+    }
+    // cleanup temp upload file
+    if (req.file?.path) { fs.unlink(req.file.path, () => {}); }
+    return res.json({ messages, mode: fullTextFlag ? 'full_text' : 'standard', filename: originalname });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
   }
 });
 

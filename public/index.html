@@ -132,6 +132,26 @@
 
     <div id="analysis-content"></div>
     <div id="toast"></div>
+
+    <!-- Preview Modal -->
+    <div id="preview-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;">
+      <div style="background:#fff;max-width:920px;width:92%;max-height:80vh;overflow:auto;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.2);">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-weight:700;">Предпросмотр запроса к модели</div>
+            <div id="preview-sub" style="font-size:0.85rem;color:#666;">Модель: gpt-5 • Температура: 1</div>
+          </div>
+          <button id="preview-close" style="border:none;background:transparent;font-size:1.2rem;cursor:pointer;">✕</button>
+        </div>
+        <div style="padding:16px 20px;">
+          <pre id="preview-body" style="white-space:pre-wrap;word-break:break-word;background:#f7f7f7;border:1px solid var(--border);padding:12px;border-radius:6px;max-height:55vh;overflow:auto;"></pre>
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end;">
+          <button id="preview-cancel" class="btn" style="background:#eee;border:1px solid var(--border);padding:8px 14px;border-radius:8px;cursor:pointer;">Отменить</button>
+          <button id="preview-confirm" class="btn-primary" style="background:var(--accent);color:#fff;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;">Отправить</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -440,53 +460,75 @@
     dz.addEventListener('drop',e=>{const f=e.dataTransfer.files[0]; if(f){fileInput.files=e.dataTransfer.files; showFileDetails(f);}});
     fileInput.addEventListener('change',e=>{const f=e.target.files[0]; if(f) showFileDetails(f);});
 
+    const formEl = document.getElementById('upload-form');
     document.getElementById('upload-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const form = e.target;
-      const data = new FormData(form);
+      const data = new FormData(formEl);
       const fullCb = document.getElementById('fulltext-checkbox');
       if (fullCb && fullCb.checked) { data.append('fullText','1'); }
-      startProgress();
+      // 1) Preview first
       try {
-        const res = await fetch('/api/upload', { method: 'POST', body: data });
-        let payload = null;
-        try {
-          payload = await res.clone().json();
-        } catch {
-          const text = await res.text();
-          if(res.status===413){ showToast('Файл слишком большой. Уменьшите размер или сожмите.'); endProgress(); return; }
-          if(res.status===400){ showToast('Неверный тип файла. Разрешены PDF или DOCX.'); endProgress(); return; }
-          showToast('Ошибка: ' + (text?.slice(0, 200) || 'unknown'));
-          endProgress();
-          return;
-        }
-        const json = payload || {};
-        if (json.success) {
-          showToast('Анализ выполнен успешно');
-          loadHistory();
-          // Fetch the newly created analysis and display
-          const txtAnalysis = json.analysis ?? '';
-          if(txtAnalysis){
-            renderAnalysis(txtAnalysis);
-          } else if(json.filename){
-            const ready = await waitForAnalysisReady(json.filename);
-            if(ready){ renderAnalysis(ready); }
-            else { showToast('Анализ ожидает завершения...'); }
-          }
-          setRetrievalChip(json.retrieval);
-          if(json.notion?.queued){ pollNotion(json.filename); } else { setNotionChip(null); }
-          // permalink update
-          if(json.filename){ const url=new URL(location); url.searchParams.set('file', json.filename); history.replaceState(null,'',url); }
-          endProgress();
-        } else {
-          showToast('Ошибка: ' + (json.error || 'unknown'));
-          endProgress();
-        }
+        const prev = await fetch('/api/preview', { method:'POST', body:data });
+        const prevJson = await prev.json();
+        if(!prev.ok){ showToast('Ошибка предпросмотра: ' + (prevJson?.error||prev.status)); return; }
+        showPreview(prevJson);
       } catch (err) {
-        showToast('Ошибка сети');
-        endProgress();
+        showToast('Ошибка предпросмотра');
       }
     });
+
+    function showPreview(prevJson){
+      const modal=document.getElementById('preview-modal');
+      const body=document.getElementById('preview-body');
+      const sub=document.getElementById('preview-sub');
+      const pretty = JSON.stringify(prevJson.messages, null, 2);
+      body.textContent = pretty;
+      sub.textContent = `Режим: ${prevJson.mode==='full_text'?'Полный текст':'Стандартный'} • Модель: gpt-5 • Температура: 1`;
+      modal.classList.remove('hidden');
+      // wire buttons
+      const close=()=>modal.classList.add('hidden');
+      document.getElementById('preview-close').onclick=close;
+      document.getElementById('preview-cancel').onclick=close;
+      document.getElementById('preview-confirm').onclick=async()=>{
+        close();
+        // proceed with actual upload
+        const data = new FormData(formEl);
+        const fullCb = document.getElementById('fulltext-checkbox');
+        if (fullCb && fullCb.checked) { data.append('fullText','1'); }
+        startProgress();
+        try {
+          const res = await fetch('/api/upload', { method: 'POST', body: data });
+          let payload = null;
+          try { payload = await res.clone().json(); }
+          catch {
+            const text = await res.text();
+            if(res.status===413){ showToast('Файл слишком большой. Уменьшите размер или сожмите.'); endProgress(); return; }
+            if(res.status===400){ showToast('Неверный тип файла. Разрешены PDF или DOCX.'); endProgress(); return; }
+            showToast('Ошибка: ' + (text?.slice(0, 200) || 'unknown'));
+            endProgress();
+            return;
+          }
+          const json = payload || {};
+          if (json.success) {
+            showToast('Анализ выполнен успешно');
+            loadHistory();
+            const txtAnalysis = json.analysis ?? '';
+            if(txtAnalysis){ renderAnalysis(txtAnalysis); }
+            else if(json.filename){ const ready = await waitForAnalysisReady(json.filename); if(ready){ renderAnalysis(ready); } }
+            setRetrievalChip(json.retrieval);
+            if(json.notion?.queued){ pollNotion(json.filename); } else { setNotionChip(null); }
+            if(json.filename){ const url=new URL(location); url.searchParams.set('file', json.filename); history.replaceState(null,'',url); }
+            endProgress();
+          } else {
+            showToast('Ошибка: ' + (json.error || 'unknown'));
+            endProgress();
+          }
+        } catch (err) {
+          showToast('Ошибка сети');
+          endProgress();
+        }
+      };
+    }
 
     // Progress helpers
     let progInt=null;
