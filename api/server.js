@@ -70,7 +70,7 @@ async function ensureNotionSchema(notion) {
   const props = db.properties || {};
   const required = [
     { name: "Дата загрузки", type: "date" },
-    { name: "Тип документа", type: "select", options: ["PDF", "DOCX"] },
+    { name: "Тип документа", type: "select", options: ["PDF", "DOCX", "CSV", "TXT"] },
     { name: "Статус", type: "select", options: ["Новый", "Готово", "Ошибка"] },
     { name: "Описание", type: "rich_text" },
     { name: "Ссылки и файлы", type: "files" },
@@ -469,7 +469,7 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
             const pageProps = {
               Name: { title: [{ text: { content: titleText.slice(0, 200) } }] },
               "Дата загрузки": { date: { start: new Date().toISOString() } },
-              "Тип документа": { select: { name: mimetype.includes("pdf") ? "PDF" : "DOCX" } },
+              "Тип документа": { select: { name: mimetype.includes("pdf") ? "PDF" : (mimetype.includes("word")||mimetype.includes("officedocument"))?"DOCX":(mimetype.includes("csv")?"CSV":"TXT") } },
               Статус: { select: { name: "Новый" } },
               FileKey: { rich_text: [{ text: { content: safeName } }] },
             };
