@@ -117,13 +117,18 @@
           <p id="drop-prompt">Выберите файл или перетащите сюда</p>
           <div id="file-info" class="hidden"></div>
         </label>
-        <div style="display:flex;align-items:center;gap:12px;justify-content:space-between;margin-top:0.5rem;">
-          <label style="display:flex;align-items:center;gap:8px;">
-            <input type="checkbox" id="fulltext-checkbox" />
+        <div style="margin-top:0.5rem;">
+          <div style="font-weight:600;margin-bottom:0.25rem;">Выберите режим анализа:</div>
+          <label style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+            <input type="radio" name="analysis-mode" value="fast" checked />
+            <span>Быстрый анализ</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+            <input type="radio" name="analysis-mode" value="full" />
             <span>Полный анализ текста</span>
           </label>
-          <button id="analyze-btn" class="btn-primary" type="submit" disabled>Загрузить и проанализировать</button>
         </div>
+        <button id="analyze-btn" class="btn-primary" type="submit" disabled>Загрузить и проанализировать</button>
         <div id="progress" class="hidden"><div class="bar"></div></div>
       </form>
     </section>
@@ -467,8 +472,8 @@
     document.getElementById('upload-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const data = new FormData(formEl);
-      const fullCb = document.getElementById('fulltext-checkbox');
-      if (fullCb && fullCb.checked) { data.append('fullText','1'); }
+      const modeFull = document.querySelector('input[name="analysis-mode"]:checked')?.value === 'full';
+      if (modeFull) { data.append('fullText','1'); }
       // 1) Preview first
       try {
         const prev = await fetch('/api/preview', { method:'POST', body:data });
@@ -496,8 +501,8 @@
         close();
         // proceed with actual upload
         const data = new FormData(formEl);
-        const fullCb = document.getElementById('fulltext-checkbox');
-        if (fullCb && fullCb.checked) { data.append('fullText','1'); }
+        const modeFull = document.querySelector('input[name="analysis-mode"]:checked')?.value === 'full';
+        if (modeFull) { data.append('fullText','1'); }
         startProgress();
         try {
           const res = await fetch('/api/upload', { method: 'POST', body: data });
