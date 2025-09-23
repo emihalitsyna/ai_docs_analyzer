@@ -77,6 +77,7 @@ async function ensureNotionSchema(notion) {
     { name: "Контакты", type: "rich_text" },
     { name: "Доработки", type: "rich_text" },
     { name: "Сопоставление с Dbrain", type: "rich_text" },
+    { name: "FileKey", type: "rich_text" },
   ];
   const update = { properties: {} };
   for (const r of required) {
@@ -470,6 +471,7 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
               "Дата загрузки": { date: { start: new Date().toISOString() } },
               "Тип документа": { select: { name: mimetype.includes("pdf") ? "PDF" : "DOCX" } },
               Статус: { select: { name: "Новый" } },
+              FileKey: { rich_text: [{ text: { content: safeName } }] },
             };
             if (descrProp) pageProps["Описание"] = { rich_text: [{ text: { content: String(descrProp).slice(0, 1900) } }] };
             if (finalLink) pageProps["Ссылки и файлы"] = { files: [ { name: properName, external: { url: finalLink } } ] };
@@ -618,14 +620,13 @@ app.get("/api/notion-status/:file", async (req, res) => {
       // fall through
     }
   }
-  // 2) Fallback to querying Notion DB by page title (Name contains base filename)
+  // 2) Fallback to querying Notion DB by FileKey exact match
   if (NOTION_TOKEN && NOTION_DATABASE_ID) {
     try {
       const notion = new NotionClient({ auth: NOTION_TOKEN });
-      const base = file.replace(/\.json$/i, "").replace(/_\d+$/, "");
       const result = await notion.databases.query({
         database_id: NOTION_DATABASE_ID,
-        filter: { property: "Name", title: { contains: base } },
+        filter: { property: "FileKey", rich_text: { equals: file } },
         sorts: [{ timestamp: "created_time", direction: "descending" }],
         page_size: 1,
       });
