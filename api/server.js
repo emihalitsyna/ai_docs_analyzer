@@ -96,8 +96,19 @@ async function ensureNotionSchema(notion) {
       }
     }
   }
-  if (Object.keys(update.properties).length) {
-    await notion.databases.update({ database_id: NOTION_DATABASE_ID, ...update });
+  try {
+    if (Object.keys(update.properties).length) {
+      await notion.databases.update({ database_id: NOTION_DATABASE_ID, ...update });
+    }
+  } catch (e) {
+    // Ignore schema update errors, proceed with current props
+  }
+  // Return fresh properties map after attempted update
+  try {
+    const db2 = await notion.databases.retrieve({ database_id: NOTION_DATABASE_ID });
+    return db2.properties || {};
+  } catch {
+    return props;
   }
 }
 
@@ -452,7 +463,8 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
             const statusFile = `${STATUS_DIR}/${safeName}.json`;
           fs.writeFileSync(statusFile, JSON.stringify({ status: "processing" }));
           const notion = new NotionClient({ auth: NOTION_TOKEN });
-          await ensureNotionSchema(notion);
+          const dbProps = await ensureNotionSchema(notion);
+          const hasFileKeyProp = !!dbProps?.['FileKey'];
 
             // Parse for properties
             let parsed = {}; try { parsed = JSON.parse(analysisJsonStr); } catch {}
@@ -471,8 +483,8 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
               "Дата загрузки": { date: { start: new Date().toISOString() } },
               "Тип документа": { select: { name: mimetype.includes("pdf") ? "PDF" : (mimetype.includes("word")||mimetype.includes("officedocument"))?"DOCX":(mimetype.includes("csv")?"CSV":"TXT") } },
               Статус: { select: { name: "Новый" } },
-              FileKey: { rich_text: [{ text: { content: safeName } }] },
             };
+            if (hasFileKeyProp) pageProps["FileKey"] = { rich_text: [{ text: { content: safeName } }] };
             if (descrProp) pageProps["Описание"] = { rich_text: [{ text: { content: String(descrProp).slice(0, 1900) } }] };
             if (finalLink) pageProps["Ссылки и файлы"] = { files: [ { name: properName, external: { url: finalLink } } ] };
 
@@ -632,6 +644,19 @@ app.get("/api/notion-status/:file", async (req, res) => {
       });
       if (result.results && result.results.length > 0) {
         const pageId = result.results[0].id;
+        const pageUrl = `https://www.notion.so/${String(pageId).replace(/-/g,'')}`;
+        return res.json({ status: "success", pageId, pageUrl });
+      }
+      // If nothing found (or property absent), fallback to Name contains base filename
+      const base = file.replace(/\.json$/i, "").replace(/_\d+$/, "");
+      const byName = await notion.databases.query({
+        database_id: NOTION_DATABASE_ID,
+        filter: { property: "Name", title: { contains: base } },
+        sorts: [{ timestamp: "created_time", direction: "descending" }],
+        page_size: 1,
+      });
+      if (byName.results && byName.results.length > 0) {
+        const pageId = byName.results[0].id;
         const pageUrl = `https://www.notion.so/${String(pageId).replace(/-/g,'')}`;
         return res.json({ status: "success", pageId, pageUrl });
       }
