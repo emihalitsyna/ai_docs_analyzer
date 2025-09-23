@@ -100,6 +100,95 @@ async function ensureNotionSchema(notion) {
   }
 }
 
+// Attempt to parse plain-text analysis (sections 1–7) into normalized data map
+function parseTextAnalysisToData(text){
+  try{
+    const lines=String(text).split(/\r?\n/);
+    // Find section ranges by lines like "1. ..."
+    const indices=[];
+    for(let i=0;i<lines.length;i++){
+      const m=lines[i].match(/^\s*([1-7])\.(\s+)(.+)$/);
+      if(m){ indices.push({ idx:i, num:parseInt(m[1],10), title:m[3].trim() }); }
+    }
+    const getRange=(n)=>{
+      const cur=indices.find(x=>x.num===n);
+      if(!cur) return [];
+      const pos=indices.indexOf(cur);
+      const end= pos+1<indices.length ? indices[pos+1].idx : lines.length;
+      return lines.slice(cur.idx+1, end);
+    };
+
+    const trimBullet=(s)=>String(s).replace(/^\s*[-–•*]\s*/,'').trim();
+    const parseBullets=(arr)=>{
+      const res=[]; let buffer=[];
+      for(const ln of arr){
+        if(/^\s*[-–•*]\s+/.test(ln)){ if(buffer.length){ const t=buffer.join(' ').trim(); if(t) res.push(t); buffer=[]; }
+          res.push(trimBullet(ln));
+        } else {
+          const t=String(ln).trim();
+          if(t) buffer.push(t);
+        }
+      }
+      if(buffer.length){ const t=buffer.join(' ').trim(); if(t) res.push(t); }
+      return res;
+    };
+
+    const data={};
+    // 1. Описание проекта -> описание_документа
+    const s1=getRange(1).join('\n').trim();
+    if(s1) data['описание_документа']=s1;
+
+    // 2. Типы документов на обработку -> необходимые_документы_и_поля (как список строк)
+    const s2=parseBullets(getRange(2));
+    if(s2.length) data['необходимые_документы_и_поля']=s2;
+
+    // 3. Требования -> разложить по подзаголовкам с маркерами "- ... требования"
+    const sec3=getRange(3);
+    if(sec3.length){
+      const subIdx=[];
+      for(let i=0;i<sec3.length;i++){
+        const m=sec3[i].match(/^\s*[-–•*]\s*(Технические требования|Функциональные требования|Нефункциональные требования|Инфраструктурные требования|Ограничения и риски)\s*$/i);
+        if(m) subIdx.push({ i, t:m[1].toLowerCase() });
+      }
+      const get3Range=(label, start)=>{
+        const pos=subIdx.findIndex(x=>x.i===start);
+        const end= pos+1<subIdx.length ? subIdx[pos+1].i : sec3.length;
+        return sec3.slice(start+1,end);
+      };
+      const mapKey=(t)=>{
+        if(/технические/i.test(t)) return 'технические_требования';
+        if(/функциональные/i.test(t)) return 'функциональные_требования';
+        if(/нефункциональные/i.test(t)) return 'нефункциональные_требования';
+        if(/инфраструктурные/i.test(t)) return 'инфраструктурные_требования';
+        return 'ограничения_и_риски';
+      };
+      subIdx.forEach(s=>{
+        const key=mapKey(s.t);
+        const items=parseBullets(get3Range(s.t, s.i));
+        if(items.length) data[key]=items.map(x=>({ описание:x }));
+      });
+    }
+
+    // 4. Список необходимых доработок -> требуемые_доработки
+    const s4=parseBullets(getRange(4));
+    if(s4.length) data['требуемые_доработки']=s4.map(x=>({ описание:x }));
+
+    // 5. Контактные лица и способы связи -> контакты
+    const s5=getRange(5);
+    const contactItems=parseBullets(s5);
+    if(contactItems.length){ data['контактные_лица']=contactItems.map(x=>String(x)); }
+
+    // 6. Ссылки и файлы -> ссылка_на_оригинальное_тз (первый URL) и список ссылок
+    const s6=getRange(6).join('\n');
+    const urls=Array.from(String(s6).matchAll(/https?:\/\/\S+/g)).map(m=>m[0]);
+    if(urls.length){ data['ссылка_на_оригинальное_тз']=urls[0]; data['ссылки']=urls; }
+
+    // 7. Оригинал ТЗ — не дублируем, ссылка добавится выше при наличии
+
+    return Object.keys(data).length ? data : null;
+  }catch{ return null; }
+}
+
 // Build human-readable Notion blocks from analysis JSON string
 function buildNotionBlocksFromAnalysis(analysisJsonStr) {
   const rich = (text) => [{ type: "text", text: { content: String(text) } }];
@@ -121,7 +210,12 @@ function buildNotionBlocksFromAnalysis(analysisJsonStr) {
       cleaned = cleaned.replace(/,\s*([}\]])/g, "$1");
       data = JSON.parse(cleaned);
     } catch {
-      return [heading("Анализ"), para("Не удалось преобразовать результат в структуру."), { object: "block", type: "code", code: { language: "json", rich_text: rich(analysisJsonStr.slice(0, 1900)) } }];
+      // Fallback: parse plain text with sections 1–7
+      const parsed = parseTextAnalysisToData(analysisJsonStr);
+      if(parsed){ data = parsed; }
+      else {
+        return [heading("Анализ"), para("Не удалось преобразовать результат в структуру."), { object: "block", type: "code", code: { language: "json", rich_text: rich(analysisJsonStr.slice(0, 1900)) } }];
+      }
     }
   }
 
