@@ -446,7 +446,7 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
     });
 
     // ---- Background work ----
-      (async () => {
+    (async () => {
       try {
         // 1) Extract full text and analyze (branch by mode)
         const text = await extractText(filePath, mimetype);
@@ -479,127 +479,126 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
           console.warn('blob_upload_analysis_failed', e?.message || e);
         }
 
-        // 2) Notion export
+        // 2) Notion export with detailed status logging
         if (NOTION_TOKEN && NOTION_DATABASE_ID) {
+          const statusFile = `${STATUS_DIR}/${safeName}.json`;
+          try { fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "init" })); } catch {}
+          const notion = new NotionClient({ auth: NOTION_TOKEN });
           try {
-            const statusFile = `${STATUS_DIR}/${safeName}.json`;
-            fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "init" }));
-            const notion = new NotionClient({ auth: NOTION_TOKEN });
-            try {
-              fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "ensure_schema" }));
-              const dbProps = await ensureNotionSchema(notion);
-              const hasFileKeyProp = !!dbProps?.['FileKey'];
-              const hasDateProp = !!dbProps?.['Дата загрузки'];
-              const hasTypeProp = !!dbProps?.['Тип документа'];
-              const hasStatusProp = !!dbProps?.['Статус'];
-              const hasDescrProp = !!dbProps?.['Описание'];
-              const hasFilesProp = !!dbProps?.['Ссылки и файлы'];
+            fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "ensure_schema" }));
+            const dbProps = await ensureNotionSchema(notion);
+            const hasFileKeyProp = !!dbProps?.['FileKey'];
+            const hasDateProp = !!dbProps?.['Дата загрузки'];
+            const hasTypeProp = !!dbProps?.['Тип документа'];
+            const hasStatusProp = !!dbProps?.['Статус'];
+            const hasDescrProp = !!dbProps?.['Описание'];
+            const hasFilesProp = !!dbProps?.['Ссылки и файлы'];
 
-              // Parse for properties
-              let parsed = {}; try { parsed = JSON.parse(analysisJsonStr); } catch {}
-              if(!parsed || typeof parsed!=='object' || Array.isArray(parsed)){
-                const alt = parseTextAnalysisToData(analysisJsonStr);
-                if(alt) parsed = alt;
-              }
-              const norm = {}; Object.entries(parsed || {}).forEach(([k, v]) => { norm[String(k).toLowerCase().replace(/\s+/g, "_")] = v; });
-              let titleText = '';
-              const customer = norm['наименование_компании_заказчика'] ?? norm['заказчик'];
-              if (Array.isArray(customer)) titleText = customer.filter(Boolean)[0] || '';
-              else if (typeof customer === 'string') titleText = customer;
-              if(!titleText){ titleText = extractCustomerFromText(analysisJsonStr); }
-              titleText = normalizeCompanyName(titleText || properName);
-              const descrProp = typeof norm["описание_документа"] === "string" ? norm["описание_документа"] : "";
-              const linkProp0 = typeof norm["ссылка_на_оригинальное_тз"] === "string" ? norm["ссылка_на_оригинальное_тз"] : "";
-              const finalLink = linkProp0 || originalUrl || "";
-
-              // Determine allowed selects
-              const resolveSelect = (propName, preferred) => {
-                const opts = (dbProps?.[propName]?.select?.options || []).map(o=>o?.name).filter(Boolean);
-                if (!opts.length) return null;
-                if (preferred && opts.includes(preferred)) return preferred;
-                return opts[0] || null;
-              };
-              const mimeToType = () => {
-                if (mimetype.includes('pdf')) return 'PDF';
-                if (mimetype.includes('word') || mimetype.includes('officedocument')) return 'DOCX';
-                if (mimetype.includes('csv')) return 'CSV';
-                return 'TXT';
-              };
-              const docTypeValue = hasTypeProp ? resolveSelect('Тип документа', mimeToType()) : null;
-              const statusValue = hasStatusProp ? resolveSelect('Статус', 'Новый') : null;
-
-              const pageProps = {
-                Name: { title: [{ text: { content: titleText.slice(0, 200) } }] },
-              };
-              if (hasDateProp) pageProps["Дата загрузки"] = { date: { start: new Date().toISOString() } };
-              if (docTypeValue) pageProps["Тип документа"] = { select: { name: docTypeValue } };
-              if (statusValue) pageProps["Статус"] = { select: { name: statusValue } };
-              if (hasFileKeyProp) pageProps["FileKey"] = { rich_text: [{ text: { content: safeName } }] };
-              if (hasDescrProp && descrProp) pageProps["Описание"] = { rich_text: chunkRichText(String(descrProp)) };
-              if (hasFilesProp && finalLink) pageProps["Ссылки и файлы"] = { files: [ { name: properName, external: { url: finalLink } } ] };
-
-              // Extra properties if present in DB
-              const contactsProp = dbProps?.['Контакты'] ? 'Контакты' : null;
-              const upgradesProp = dbProps?.['Доработки'] ? 'Доработки' : null;
-              const mappingProp = dbProps?.['Сопоставление с Dbrain'] ? 'Сопоставление с Dbrain' : null;
-              const contacts = norm['контактные_лица'];
-              if (contactsProp && Array.isArray(contacts) && contacts.length) {
-                const text = contacts.map(c=>{
-                  if(c && typeof c==='object') return [c.фио,c.роль,c.email,c.телефон].filter(Boolean).join(' — ');
-                  return String(c);
-                }).join('\n');
-                pageProps[contactsProp] = { rich_text: chunkRichText(text) };
-              }
-              const upgrades = norm['требуемые_доработки'];
-              if (upgradesProp && Array.isArray(upgrades) && upgrades.length) {
-                const text = upgrades.map(u=>{
-                  if(u && typeof u==='object') return [u.описание,u.приоритет,u.оценка_сложности].filter(Boolean).join(' — ');
-                  return String(u);
-                }).join('\n');
-                pageProps[upgradesProp] = { rich_text: chunkRichText(text) };
-              }
-              const mapping = norm['сопоставление_с_dbrain'];
-              if (mappingProp && Array.isArray(mapping) && mapping.length) {
-                const text = mapping.map(m=>{
-                  if(m && typeof m==='object') return [m.требование,m.статус,m.комментарий, m.цитата?`«${m.цитата}»`:null].filter(Boolean).join(' — ');
-                  return String(m);
-                }).join('\n');
-                pageProps[mappingProp] = { rich_text: chunkRichText(text) };
-              }
-
-              fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "pages.create", title: pageProps?.Name?.title?.[0]?.text?.content || null }));
-              const blocks = buildNotionBlocksFromAnalysis(analysisJsonStr);
-              const first = blocks.slice(0, 50);
-              const rest = blocks.slice(50);
-              const page = await notion.pages.create({ parent: { database_id: NOTION_DATABASE_ID }, properties: pageProps, children: first });
-              for (let i = 0; i < rest.length; i += 90) {
-                const slice = rest.slice(i, i + 90);
-                try { await notion.blocks.children.append({ block_id: page.id, children: slice }); } catch (errAppend) {
-                  try { fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "append_error", message: String(errAppend?.message||errAppend) })); } catch {}
-                }
-              }
-              if (originalUrl) {
-                try { await notion.blocks.children.append({ block_id: page.id, children: [ { object: 'block', type: 'file', file: { type: 'external', external: { url: originalUrl } } } ] }); } catch (errFile) {
-                  try { fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "file_block_error", message: String(errFile?.message||errFile) })); } catch {}
-                }
-              }
-              try { await notion.pages.update({ page_id: page.id, properties: { Статус: { select: { name: "Готово" } } } }); } catch (errUpd) {
-                try { fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "status_update_error", message: String(errUpd?.message||errUpd) })); } catch {}
-              }
-              const pageUrl = `https://www.notion.so/${String(page.id).replace(/-/g,'')}`;
-              fs.writeFileSync(statusFile, JSON.stringify({ status: "success", pageId: page.id, pageUrl }));
-            } catch (notionErr) {
-              const statusFile = `${STATUS_DIR}/${safeName}.json`;
-              try { fs.writeFileSync(statusFile, JSON.stringify({ status: "error", step: "outer", message: notionErr.message })); } catch {}
+            let parsed = {}; try { parsed = JSON.parse(analysisJsonStr); } catch {}
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+              const alt = parseTextAnalysisToData(analysisJsonStr);
+              if (alt) parsed = alt;
             }
-        } catch (e) {
+            const norm = {}; Object.entries(parsed || {}).forEach(([k, v]) => { norm[String(k).toLowerCase().replace(/\s+/g, "_")] = v; });
+            let titleText = '';
+            const customer = norm['наименование_компании_заказчика'] ?? norm['заказчик'];
+            if (Array.isArray(customer)) titleText = customer.filter(Boolean)[0] || '';
+            else if (typeof customer === 'string') titleText = customer;
+            if (!titleText) { titleText = extractCustomerFromText(analysisJsonStr); }
+            titleText = normalizeCompanyName(titleText || properName);
+            const descrProp = typeof norm["описание_документа"] === "string" ? norm["описание_документа"] : "";
+            const linkProp0 = typeof norm["ссылка_на_оригинальное_тз"] === "string" ? norm["ссылка_на_оригинальное_тз"] : "";
+            const finalLink = linkProp0 || originalUrl || "";
+
+            const resolveSelect = (propName, preferred) => {
+              const opts = (dbProps?.[propName]?.select?.options || []).map(o => o?.name).filter(Boolean);
+              if (!opts.length) return null;
+              if (preferred && opts.includes(preferred)) return preferred;
+              return opts[0] || null;
+            };
+            const mimeToType = () => {
+              if (mimetype.includes('pdf')) return 'PDF';
+              if (mimetype.includes('word') || mimetype.includes('officedocument')) return 'DOCX';
+              if (mimetype.includes('csv')) return 'CSV';
+              return 'TXT';
+            };
+            const docTypeValue = hasTypeProp ? resolveSelect('Тип документа', mimeToType()) : null;
+            const statusValue = hasStatusProp ? resolveSelect('Статус', 'Новый') : null;
+
+            const pageProps = {
+              Name: { title: [{ text: { content: titleText.slice(0, 200) } }] },
+            };
+            if (hasDateProp) pageProps["Дата загрузки"] = { date: { start: new Date().toISOString() } };
+            if (docTypeValue) pageProps["Тип документа"] = { select: { name: docTypeValue } };
+            if (statusValue) pageProps["Статус"] = { select: { name: statusValue } };
+            if (hasFileKeyProp) pageProps["FileKey"] = { rich_text: [{ text: { content: safeName } }] };
+            if (hasDescrProp && descrProp) pageProps["Описание"] = { rich_text: chunkRichText(String(descrProp)) };
+            if (hasFilesProp && finalLink) pageProps["Ссылки и файлы"] = { files: [{ name: properName, external: { url: finalLink } }] };
+
+            const contactsProp = dbProps?.['Контакты'] ? 'Контакты' : null;
+            const upgradesProp = dbProps?.['Доработки'] ? 'Доработки' : null;
+            const mappingProp = dbProps?.['Сопоставление с Dbrain'] ? 'Сопоставление с Dbrain' : null;
+            const contacts = norm['контактные_лица'];
+            if (contactsProp && Array.isArray(contacts) && contacts.length) {
+              const text = contacts.map(c => {
+                if (c && typeof c === 'object') return [c.фио, c.роль, c.email, c.телефон].filter(Boolean).join(' — ');
+                return String(c);
+              }).join('\n');
+              pageProps[contactsProp] = { rich_text: chunkRichText(text) };
+            }
+            const upgrades = norm['требуемые_доработки'];
+            if (upgradesProp && Array.isArray(upgrades) && upgrades.length) {
+              const text = upgrades.map(u => {
+                if (u && typeof u === 'object') return [u.описание, u.приоритет, u.оценка_сложности].filter(Boolean).join(' — ');
+                return String(u);
+              }).join('\n');
+              pageProps[upgradesProp] = { rich_text: chunkRichText(text) };
+            }
+            const mapping = norm['сопоставление_с_dbrain'];
+            if (mappingProp && Array.isArray(mapping) && mapping.length) {
+              const text = mapping.map(m => {
+                if (m && typeof m === 'object') return [m.требование, m.статус, m.комментарий, m.цитата ? `«${m.цитата}»` : null].filter(Boolean).join(' — ');
+                return String(m);
+              }).join('\n');
+              pageProps[mappingProp] = { rich_text: chunkRichText(text) };
+            }
+
+            fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "pages.create", title: pageProps?.Name?.title?.[0]?.text?.content || null }));
+            const blocks = buildNotionBlocksFromAnalysis(analysisJsonStr);
+            const first = blocks.slice(0, 50);
+            const rest = blocks.slice(50);
+            const page = await notion.pages.create({ parent: { database_id: NOTION_DATABASE_ID }, properties: pageProps, children: first });
+            for (let i = 0; i < rest.length; i += 90) {
+              const slice = rest.slice(i, i + 90);
+              try { await notion.blocks.children.append({ block_id: page.id, children: slice }); } catch (errAppend) {
+                try { fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "append_error", message: String(errAppend?.message || errAppend) })); } catch {}
+              }
+            }
+            if (originalUrl) {
+              try {
+                await notion.blocks.children.append({ block_id: page.id, children: [{ object: 'block', type: 'file', file: { type: 'external', external: { url: originalUrl } } }] });
+              } catch (errFile) {
+                try { fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "file_block_error", message: String(errFile?.message || errFile) })); } catch {}
+              }
+            }
+            try { await notion.pages.update({ page_id: page.id, properties: { Статус: { select: { name: "Готово" } } } }); } catch (errUpd) {
+              try { fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "status_update_error", message: String(errUpd?.message || errUpd) })); } catch {}
+            }
+            const pageUrl = `https://www.notion.so/${String(page.id).replace(/-/g, '')}`;
+            fs.writeFileSync(statusFile, JSON.stringify({ status: "success", pageId: page.id, pageUrl }));
+          } catch (notionErr) {
+            try { fs.writeFileSync(statusFile, JSON.stringify({ status: "error", step: "outer", message: notionErr?.message || String(notionErr) })); } catch {}
+          }
+        }
+      } catch (e) {
         // Write error into file
         try { fs.writeFileSync(outPath, JSON.stringify({ error: e.message }), "utf-8"); } catch {}
       } finally {
         // Cleanup temp upload file
         if (req.file?.path) { fs.unlink(req.file.path, () => {}); }
-        }
-      })();
+      }
+    })();
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
