@@ -465,6 +465,11 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
           const notion = new NotionClient({ auth: NOTION_TOKEN });
           const dbProps = await ensureNotionSchema(notion);
           const hasFileKeyProp = !!dbProps?.['FileKey'];
+          const hasDateProp = !!dbProps?.['Дата загрузки'];
+          const hasTypeProp = !!dbProps?.['Тип документа'];
+          const hasStatusProp = !!dbProps?.['Статус'];
+          const hasDescrProp = !!dbProps?.['Описание'];
+          const hasFilesProp = !!dbProps?.['Ссылки и файлы'];
 
             // Parse for properties
             let parsed = {}; try { parsed = JSON.parse(analysisJsonStr); } catch {}
@@ -478,15 +483,32 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
             const linkProp0 = typeof norm["ссылка_на_оригинальное_тз"] === "string" ? norm["ссылка_на_оригинальное_тз"] : "";
             const finalLink = linkProp0 || originalUrl || "";
 
+            // Determine allowed selects
+            const resolveSelect = (propName, preferred) => {
+              const opts = (dbProps?.[propName]?.select?.options || []).map(o=>o?.name).filter(Boolean);
+              if (!opts.length) return null;
+              if (preferred && opts.includes(preferred)) return preferred;
+              // fallback to first option if preferred is missing
+              return opts[0] || null;
+            };
+            const mimeToType = () => {
+              if (mimetype.includes('pdf')) return 'PDF';
+              if (mimetype.includes('word') || mimetype.includes('officedocument')) return 'DOCX';
+              if (mimetype.includes('csv')) return 'CSV';
+              return 'TXT';
+            };
+            const docTypeValue = hasTypeProp ? resolveSelect('Тип документа', mimeToType()) : null;
+            const statusValue = hasStatusProp ? resolveSelect('Статус', 'Новый') : null;
+
             const pageProps = {
               Name: { title: [{ text: { content: titleText.slice(0, 200) } }] },
-              "Дата загрузки": { date: { start: new Date().toISOString() } },
-              "Тип документа": { select: { name: mimetype.includes("pdf") ? "PDF" : (mimetype.includes("word")||mimetype.includes("officedocument"))?"DOCX":(mimetype.includes("csv")?"CSV":"TXT") } },
-              Статус: { select: { name: "Новый" } },
             };
+            if (hasDateProp) pageProps["Дата загрузки"] = { date: { start: new Date().toISOString() } };
+            if (docTypeValue) pageProps["Тип документа"] = { select: { name: docTypeValue } };
+            if (statusValue) pageProps["Статус"] = { select: { name: statusValue } };
             if (hasFileKeyProp) pageProps["FileKey"] = { rich_text: [{ text: { content: safeName } }] };
-            if (descrProp) pageProps["Описание"] = { rich_text: [{ text: { content: String(descrProp).slice(0, 1900) } }] };
-            if (finalLink) pageProps["Ссылки и файлы"] = { files: [ { name: properName, external: { url: finalLink } } ] };
+            if (hasDescrProp && descrProp) pageProps["Описание"] = { rich_text: [{ text: { content: String(descrProp).slice(0, 1900) } }] };
+            if (hasFilesProp && finalLink) pageProps["Ссылки и файлы"] = { files: [ { name: properName, external: { url: finalLink } } ] };
 
             const blocks = buildNotionBlocksFromAnalysis(analysisJsonStr);
             const first = blocks.slice(0, 50);
