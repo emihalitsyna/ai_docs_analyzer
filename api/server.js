@@ -201,15 +201,24 @@ function parseTextAnalysisToData(text){
   }catch{ return null; }
 }
 
+function chunkRichText(content, chunkSize = 1900) {
+  const s = String(content || '');
+  const parts = [];
+  for (let i = 0; i < s.length; i += chunkSize) {
+    parts.push({ type: 'text', text: { content: s.slice(i, i + chunkSize) } });
+  }
+  return parts.length ? parts : [{ type: 'text', text: { content: '' } }];
+}
+
 // Build human-readable Notion blocks from analysis JSON string
 function buildNotionBlocksFromAnalysis(analysisJsonStr) {
   const rich = (text) => [{ type: "text", text: { content: String(text) } }];
   const richLink = (text, url) => [{ type: "text", text: { content: String(text), link: url ? { url } : null } }];
   const heading = (text, level = 2) => ({ object: "block", type: `heading_${level}`, [`heading_${level}`]: { rich_text: rich(text) } });
-  const para = (text) => ({ object: "block", type: "paragraph", paragraph: { rich_text: rich(text) } });
+  const para = (text) => ({ object: "block", type: "paragraph", paragraph: { rich_text: chunkRichText(text) } });
   const paraLink = (text, url) => ({ object: "block", type: "paragraph", paragraph: { rich_text: richLink(text, url) } });
-  const bullet = (text, children) => ({ object: "block", type: "bulleted_list_item", bulleted_list_item: { rich_text: rich(text), children } });
-  const numbered = (text, children) => ({ object: "block", type: "numbered_list_item", numbered_list_item: { rich_text: rich(text), children } });
+  const bullet = (text, children) => ({ object: "block", type: "bulleted_list_item", bulleted_list_item: { rich_text: chunkRichText(text), children } });
+  const numbered = (text, children) => ({ object: "block", type: "numbered_list_item", numbered_list_item: { rich_text: chunkRichText(text), children } });
 
   let data;
   try { data = JSON.parse(analysisJsonStr); }
@@ -507,8 +516,37 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
             if (docTypeValue) pageProps["Тип документа"] = { select: { name: docTypeValue } };
             if (statusValue) pageProps["Статус"] = { select: { name: statusValue } };
             if (hasFileKeyProp) pageProps["FileKey"] = { rich_text: [{ text: { content: safeName } }] };
-            if (hasDescrProp && descrProp) pageProps["Описание"] = { rich_text: [{ text: { content: String(descrProp).slice(0, 1900) } }] };
+            if (hasDescrProp && descrProp) pageProps["Описание"] = { rich_text: chunkRichText(String(descrProp)) };
             if (hasFilesProp && finalLink) pageProps["Ссылки и файлы"] = { files: [ { name: properName, external: { url: finalLink } } ] };
+
+            // Extra properties if present in DB
+            const contactsProp = dbProps?.['Контакты'] ? 'Контакты' : null;
+            const upgradesProp = dbProps?.['Доработки'] ? 'Доработки' : null;
+            const mappingProp = dbProps?.['Сопоставление с Dbrain'] ? 'Сопоставление с Dbrain' : null;
+            const contacts = norm['контактные_лица'];
+            if (contactsProp && Array.isArray(contacts) && contacts.length) {
+              const text = contacts.map(c=>{
+                if(c && typeof c==='object') return [c.фио,c.роль,c.email,c.телефон].filter(Boolean).join(' — ');
+                return String(c);
+              }).join('\n');
+              pageProps[contactsProp] = { rich_text: chunkRichText(text) };
+            }
+            const upgrades = norm['требуемые_доработки'];
+            if (upgradesProp && Array.isArray(upgrades) && upgrades.length) {
+              const text = upgrades.map(u=>{
+                if(u && typeof u==='object') return [u.описание,u.приоритет,u.оценка_сложности].filter(Boolean).join(' — ');
+                return String(u);
+              }).join('\n');
+              pageProps[upgradesProp] = { rich_text: chunkRichText(text) };
+            }
+            const mapping = norm['сопоставление_с_dbrain'];
+            if (mappingProp && Array.isArray(mapping) && mapping.length) {
+              const text = mapping.map(m=>{
+                if(m && typeof m==='object') return [m.требование,m.статус,m.комментарий, m.цитата?`«${m.цитата}»`:null].filter(Boolean).join(' — ');
+                return String(m);
+              }).join('\n');
+              pageProps[mappingProp] = { rich_text: chunkRichText(text) };
+            }
 
             const blocks = buildNotionBlocksFromAnalysis(analysisJsonStr);
             const first = blocks.slice(0, 50);
