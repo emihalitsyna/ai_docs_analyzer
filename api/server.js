@@ -399,7 +399,9 @@ app.get("/api/status", (req, res) => {
 // Upload endpoint (prefixed with /api for Vercel routing)
 app.post("/api/upload", upload.single("document"), async (req, res) => {
   try {
-    const { path: filePath, mimetype, originalname } = req.file;
+    const fileRec = req.file || {};
+    const { path: filePath, mimetype, originalname } = fileRec;
+    if (!filePath || !originalname) return res.status(400).json({ error: "No file" });
     const fullTextFlag = (req.body && (req.body.fullText === '1' || req.body.fullText === 'true')) ? true : false;
     // Fix filename mojibake (incoming latin1 -> utf8)
     let properName = Buffer.from(originalname, "latin1").toString("utf8");
