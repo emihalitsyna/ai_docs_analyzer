@@ -50,6 +50,17 @@ function normalizeCompanyName(original) {
   return s || String(original).trim();
 }
 
+function extractCustomerFromText(raw){
+  try{
+    const s=String(raw||'');
+    const m=s.match(/\bЗаказчик\s*[:\-]\s*([^\n\r]+)/i);
+    if(m && m[1]){
+      return m[1].replace(/[«»"'“”]/g,'').trim();
+    }
+  }catch{}
+  return '';
+}
+
 async function uploadToBlob(filePath, remoteName, contentType) {
   try {
     if (!BLOB_READ_WRITE_TOKEN) return null;
@@ -482,11 +493,16 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
 
             // Parse for properties
             let parsed = {}; try { parsed = JSON.parse(analysisJsonStr); } catch {}
+            if(!parsed || typeof parsed!=='object' || Array.isArray(parsed)){
+              const alt = parseTextAnalysisToData(analysisJsonStr);
+              if(alt) parsed = alt;
+            }
             const norm = {}; Object.entries(parsed || {}).forEach(([k, v]) => { norm[String(k).toLowerCase().replace(/\s+/g, "_")] = v; });
             let titleText = '';
             const customer = norm['наименование_компании_заказчика'] ?? norm['заказчик'];
             if (Array.isArray(customer)) titleText = customer.filter(Boolean)[0] || '';
             else if (typeof customer === 'string') titleText = customer;
+            if(!titleText){ titleText = extractCustomerFromText(analysisJsonStr); }
             titleText = normalizeCompanyName(titleText || properName);
             const descrProp = typeof norm["описание_документа"] === "string" ? norm["описание_документа"] : "";
             const linkProp0 = typeof norm["ссылка_на_оригинальное_тз"] === "string" ? norm["ссылка_на_оригинальное_тз"] : "";
