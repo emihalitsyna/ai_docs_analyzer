@@ -632,27 +632,27 @@ app.get("/api/notion-status/:file", async (req, res) => {
       // fall through
     }
   }
-  // 2) Query Notion DB safely
+  // 2) Query Notion DB
   if (NOTION_TOKEN && NOTION_DATABASE_ID) {
     try {
       const notion = new NotionClient({ auth: NOTION_TOKEN });
+      // Check if FileKey property exists
       let hasFileKey = false;
       try {
         const db = await notion.databases.retrieve({ database_id: NOTION_DATABASE_ID });
-        hasFileKey = !!db?.properties?.['FileKey'];
+        hasFileKey = !!db?.properties?.["FileKey"];
       } catch {}
 
-      // Try by FileKey when property exists
       if (hasFileKey) {
         try {
-          const byKey = await notion.databases.query({
+          const byFK = await notion.databases.query({
             database_id: NOTION_DATABASE_ID,
             filter: { property: "FileKey", rich_text: { equals: file } },
             sorts: [{ timestamp: "created_time", direction: "descending" }],
             page_size: 1,
           });
-          if (byKey.results && byKey.results.length > 0) {
-            const pageId = byKey.results[0].id;
+          if (byFK.results && byFK.results.length > 0) {
+            const pageId = byFK.results[0].id;
             const pageUrl = `https://www.notion.so/${String(pageId).replace(/-/g,'')}`;
             return res.json({ status: "success", pageId, pageUrl });
           }
@@ -661,7 +661,7 @@ app.get("/api/notion-status/:file", async (req, res) => {
         }
       }
 
-      // Fallback: search by Name contains base filename
+      // Fallback: query by Name contains base filename
       const base = file.replace(/\.json$/i, "").replace(/_\d+$/, "");
       const byName = await notion.databases.query({
         database_id: NOTION_DATABASE_ID,
@@ -674,7 +674,6 @@ app.get("/api/notion-status/:file", async (req, res) => {
         const pageUrl = `https://www.notion.so/${String(pageId).replace(/-/g,'')}`;
         return res.json({ status: "success", pageId, pageUrl });
       }
-      return res.json({ status: "unknown" });
     } catch (e) {
       return res.json({ status: "error", message: e.message });
     }
