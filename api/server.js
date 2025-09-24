@@ -632,45 +632,49 @@ app.get("/api/notion-status/:file", async (req, res) => {
       // fall through
     }
   }
-  // 2) Query Notion DB (guard against missing properties)
+  // 2) Query Notion DB safely
   if (NOTION_TOKEN && NOTION_DATABASE_ID) {
     try {
       const notion = new NotionClient({ auth: NOTION_TOKEN });
-      let pageId=null, pageUrl=null;
-      // Check DB schema first
-      let hasFileKey=false;
-      try { const db=await notion.databases.retrieve({ database_id: NOTION_DATABASE_ID }); hasFileKey=!!db?.properties?.FileKey; } catch {}
+      let hasFileKey = false;
+      try {
+        const db = await notion.databases.retrieve({ database_id: NOTION_DATABASE_ID });
+        hasFileKey = !!db?.properties?.['FileKey'];
+      } catch {}
+
+      // Try by FileKey when property exists
       if (hasFileKey) {
         try {
-          const byFileKey = await notion.databases.query({
+          const byKey = await notion.databases.query({
             database_id: NOTION_DATABASE_ID,
             filter: { property: "FileKey", rich_text: { equals: file } },
             sorts: [{ timestamp: "created_time", direction: "descending" }],
             page_size: 1,
           });
-          if (byFileKey.results && byFileKey.results.length > 0) {
-            pageId = byFileKey.results[0].id;
+          if (byKey.results && byKey.results.length > 0) {
+            const pageId = byKey.results[0].id;
+            const pageUrl = `https://www.notion.so/${String(pageId).replace(/-/g,'')}`;
+            return res.json({ status: "success", pageId, pageUrl });
           }
-        } catch {}
+        } catch {
+          // ignore and fallback to Name
+        }
       }
-      if (!pageId) {
-        const base = file.replace(/\.json$/i, "").replace(/_\d+$/, "");
-        try {
-          const byName = await notion.databases.query({
-            database_id: NOTION_DATABASE_ID,
-            filter: { property: "Name", title: { contains: base } },
-            sorts: [{ timestamp: "created_time", direction: "descending" }],
-            page_size: 1,
-          });
-          if (byName.results && byName.results.length > 0) {
-            pageId = byName.results[0].id;
-          }
-        } catch {}
-      }
-      if (pageId) {
-        pageUrl = `https://www.notion.so/${String(pageId).replace(/-/g,'')}`;
+
+      // Fallback: search by Name contains base filename
+      const base = file.replace(/\.json$/i, "").replace(/_\d+$/, "");
+      const byName = await notion.databases.query({
+        database_id: NOTION_DATABASE_ID,
+        filter: { property: "Name", title: { contains: base } },
+        sorts: [{ timestamp: "created_time", direction: "descending" }],
+        page_size: 1,
+      });
+      if (byName.results && byName.results.length > 0) {
+        const pageId = byName.results[0].id;
+        const pageUrl = `https://www.notion.so/${String(pageId).replace(/-/g,'')}`;
         return res.json({ status: "success", pageId, pageUrl });
       }
+      return res.json({ status: "unknown" });
     } catch (e) {
       return res.json({ status: "error", message: e.message });
     }
