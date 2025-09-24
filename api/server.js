@@ -734,6 +734,45 @@ app.get("/api/notion-status/:file", async (req, res) => {
         const pageUrl = `https://www.notion.so/${String(pageId).replace(/-/g,'')}`;
         return res.json({ status: "success", pageId, pageUrl });
       }
+
+      // Second fallback: read analysis to compute expected title (company name)
+      try {
+        // Try local file first
+        let text=null;
+        const localPath = path.join("/tmp", "analysis_results", file);
+        if (fs.existsSync(localPath)) {
+          text = fs.readFileSync(localPath, "utf-8");
+        } else if (BLOB_READ_WRITE_TOKEN) {
+          try {
+            const { list } = await import('@vercel/blob');
+            const result = await list({ prefix: `analyses/${file}`, token: BLOB_READ_WRITE_TOKEN, limit: 1 });
+            const blob = (result?.blobs || [])[0];
+            if (blob?.url) { const r = await fetch(blob.url); if (r.ok) text = await r.text(); }
+          } catch {}
+        }
+        if (text) {
+          let parsed={}; try{ parsed=JSON.parse(text);}catch{}
+          const norm={}; Object.entries(parsed||{}).forEach(([k,v])=>{ norm[String(k).toLowerCase().replace(/\s+/g,'_')]=v; });
+          let titleText='';
+          const customer = norm['наименование_компании_заказчика'] ?? norm['заказчик'];
+          if (Array.isArray(customer)) titleText = customer.filter(Boolean)[0] || '';
+          else if (typeof customer === 'string') titleText = customer;
+          titleText = normalizeCompanyName(titleText || base);
+          if (titleText) {
+            const byTitle = await notion.databases.query({
+              database_id: NOTION_DATABASE_ID,
+              filter: { property: "Name", title: { contains: titleText } },
+              sorts: [{ timestamp: "created_time", direction: "descending" }],
+              page_size: 1,
+            });
+            if (byTitle.results && byTitle.results.length > 0) {
+              const pageId = byTitle.results[0].id;
+              const pageUrl = `https://www.notion.so/${String(pageId).replace(/-/g,'')}`;
+              return res.json({ status: "success", pageId, pageUrl });
+            }
+          }
+        }
+      } catch {}
     } catch (e) {
       return res.json({ status: "error", message: e.message });
     }
