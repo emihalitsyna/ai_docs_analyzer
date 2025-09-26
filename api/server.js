@@ -481,6 +481,24 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
           analysisJsonStr = fullTextFlag
             ? await analyzeDocumentFull(text, properName)
             : await analyzeDocument(text, properName);
+          const rawPreview = (() => {
+            if (analysisJsonStr === null || analysisJsonStr === undefined) return null;
+            const str = String(analysisJsonStr);
+            return str.length > 200 ? str.slice(0, 200) : str;
+          })();
+          try {
+            console.info(JSON.stringify({
+              event: 'analysis_model_raw',
+              safeName,
+              preview: rawPreview,
+            }));
+          } catch {}
+          const rawPath = path.join(outDir, safeName.replace(/\.json$/i, '') + '.raw.txt');
+          try {
+            fs.writeFileSync(rawPath, String(analysisJsonStr ?? ''), 'utf-8');
+          } catch (rawErr) {
+            console.warn('analysis_raw_write_failed', rawErr?.message || rawErr);
+          }
           try {
             console.info(JSON.stringify({
               event: 'analysis_model_response',
@@ -506,15 +524,26 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
           if (originalUrl && !linkSnake) obj['ссылка_на_оригинальное_тз'] = originalUrl;
           analysisJsonStr = JSON.stringify(obj);
         } catch {}
-        // Save to the pre-created file
-        fs.writeFileSync(outPath, analysisJsonStr, "utf-8");
-        try {
-          console.info(JSON.stringify({ event: 'analysis_saved_local', safeName }));
-        } catch {}
-
-        if (notionStatusFile) {
-          try { fs.writeFileSync(notionStatusFile, JSON.stringify({ status: "processing", step: "analysis_complete" })); } catch {}
+        if (analysisJsonStr && analysisJsonStr !== '{}' && String(analysisJsonStr).trim() !== '') {
+          fs.writeFileSync(outPath, analysisJsonStr, "utf-8");
+          try {
+            console.info(JSON.stringify({ event: 'analysis_saved_local', safeName }));
+          } catch {}
+          if (notionStatusFile) {
+            try { fs.writeFileSync(notionStatusFile, JSON.stringify({ status: "processing", step: "analysis_complete" })); } catch {}
+          }
+        } else {
+          const msg = { status: "error", step: "analysis_empty", message: "OpenAI returned empty analysis" };
+          try { fs.writeFileSync(outPath, JSON.stringify(msg), "utf-8"); } catch {}
+          if (notionStatusFile) {
+            try { fs.writeFileSync(notionStatusFile, JSON.stringify({ ...msg })); } catch {}
+          }
+          try {
+            console.warn(JSON.stringify({ event: 'analysis_empty', safeName }));
+          } catch {}
+          return;
         }
+        
 
         // Also persist analysis to durable storage (Vercel Blob) for serverless environments
         try {
