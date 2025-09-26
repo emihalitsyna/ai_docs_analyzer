@@ -419,6 +419,10 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
     const outPath = path.join(outDir, safeName);
     fs.writeFileSync(outPath, JSON.stringify({ status: "processing" }), "utf-8");
 
+    const notionStatusFile = (NOTION_TOKEN && NOTION_DATABASE_ID)
+      ? path.join(STATUS_DIR, safeName)
+      : null;
+
     // If Retrieval enabled, upload to Vector Store (diagnostic/optional)
     if (OPENAI_VECTOR_STORE) {
       try {
@@ -447,12 +451,38 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
 
     // ---- Background work ----
     (async () => {
+      const startedAt = Date.now();
+      const context = {
+        event: 'analysis_background_start',
+        filename: properName,
+        safeName,
+        mode: fullTextFlag ? 'full_text' : 'standard',
+        mimetype,
+        size: fileRec?.size ?? null,
+      };
+      try {
+        console.info(JSON.stringify(context));
+      } catch {}
       try {
         // 1) Extract full text and analyze (branch by mode)
         const text = await extractText(filePath, mimetype);
+        try {
+          console.info(JSON.stringify({
+            event: 'analysis_text_extracted',
+            safeName,
+            length: text?.length ?? null,
+          }));
+        } catch {}
         let analysisJsonStr = fullTextFlag
           ? await analyzeDocumentFull(text, properName)
           : await analyzeDocument(text, properName);
+        try {
+          console.info(JSON.stringify({
+            event: 'analysis_model_response',
+            safeName,
+            chars: analysisJsonStr ? String(analysisJsonStr).length : null,
+          }));
+        } catch {}
         // Normalize
         analysisJsonStr = normalizeJsonString(analysisJsonStr);
         // If Blob URL is available, inject it when link field is empty/missing
@@ -464,6 +494,13 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
         } catch {}
         // Save to the pre-created file
         fs.writeFileSync(outPath, analysisJsonStr, "utf-8");
+        try {
+          console.info(JSON.stringify({ event: 'analysis_saved_local', safeName }));
+        } catch {}
+
+        if (notionStatusFile) {
+          try { fs.writeFileSync(notionStatusFile, JSON.stringify({ status: "processing", step: "analysis_complete" })); } catch {}
+        }
 
         // Also persist analysis to durable storage (Vercel Blob) for serverless environments
         try {
@@ -474,6 +511,9 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
               token: BLOB_READ_WRITE_TOKEN,
               contentType: 'application/json; charset=utf-8'
             });
+            try {
+              console.info(JSON.stringify({ event: 'analysis_saved_blob', safeName }));
+            } catch {}
           }
         } catch (e) {
           console.warn('blob_upload_analysis_failed', e?.message || e);
@@ -481,12 +521,15 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
 
         // 2) Notion export with detailed status logging
         if (NOTION_TOKEN && NOTION_DATABASE_ID) {
-          const statusFile = `${STATUS_DIR}/${safeName}.json`;
+          const statusFile = notionStatusFile;
           try { fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "init" })); } catch {}
           const notion = new NotionClient({ auth: NOTION_TOKEN });
           try {
             fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "ensure_schema" }));
             const dbProps = await ensureNotionSchema(notion);
+            try {
+              console.info(JSON.stringify({ event: 'notion_schema_ready', safeName }));
+            } catch {}
             const hasFileKeyProp = !!dbProps?.['FileKey'];
             const hasDateProp = !!dbProps?.['Дата загрузки'];
             const hasTypeProp = !!dbProps?.['Тип документа'];
@@ -568,10 +611,14 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
             const first = blocks.slice(0, 50);
             const rest = blocks.slice(50);
             const page = await notion.pages.create({ parent: { database_id: NOTION_DATABASE_ID }, properties: pageProps, children: first });
+            try {
+              console.info(JSON.stringify({ event: 'notion_page_created', safeName, pageId: page?.id || null }));
+            } catch {}
             for (let i = 0; i < rest.length; i += 90) {
               const slice = rest.slice(i, i + 90);
               try { await notion.blocks.children.append({ block_id: page.id, children: slice }); } catch (errAppend) {
                 try { fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "append_error", message: String(errAppend?.message || errAppend) })); } catch {}
+                console.warn('notion_append_error', errAppend?.message || errAppend);
               }
             }
             if (originalUrl) {
@@ -579,23 +626,40 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
                 await notion.blocks.children.append({ block_id: page.id, children: [{ object: 'block', type: 'file', file: { type: 'external', external: { url: originalUrl } } }] });
               } catch (errFile) {
                 try { fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "file_block_error", message: String(errFile?.message || errFile) })); } catch {}
+                console.warn('notion_file_block_error', errFile?.message || errFile);
               }
             }
             try { await notion.pages.update({ page_id: page.id, properties: { Статус: { select: { name: "Готово" } } } }); } catch (errUpd) {
               try { fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "status_update_error", message: String(errUpd?.message || errUpd) })); } catch {}
+              console.warn('notion_status_update_error', errUpd?.message || errUpd);
             }
             const pageUrl = `https://www.notion.so/${String(page.id).replace(/-/g, '')}`;
             fs.writeFileSync(statusFile, JSON.stringify({ status: "success", pageId: page.id, pageUrl }));
+            try {
+              console.info(JSON.stringify({ event: 'notion_success', safeName, pageId: page.id, pageUrl }));
+            } catch {}
           } catch (notionErr) {
             try { fs.writeFileSync(statusFile, JSON.stringify({ status: "error", step: "outer", message: notionErr?.message || String(notionErr) })); } catch {}
+            console.error('notion_export_error', notionErr);
           }
         }
       } catch (e) {
         // Write error into file
         try { fs.writeFileSync(outPath, JSON.stringify({ error: e.message }), "utf-8"); } catch {}
+        if (notionStatusFile) {
+          try { fs.writeFileSync(notionStatusFile, JSON.stringify({ status: "error", step: "analysis", message: e?.message || String(e) })); } catch {}
+        }
+        console.error('analysis_background_error', e);
       } finally {
         // Cleanup temp upload file
         if (req.file?.path) { fs.unlink(req.file.path, () => {}); }
+        try {
+          console.info(JSON.stringify({
+            event: 'analysis_background_finished',
+            safeName,
+            durationMs: Date.now() - startedAt,
+          }));
+        } catch {}
       }
     })();
 
@@ -706,7 +770,7 @@ app.get("/api/analyses/:file", async (req, res) => {
 // Endpoint to poll Notion export status
 app.get("/api/notion-status/:file", async (req, res) => {
   const file = req.params.file;
-  const statusPath = `${STATUS_DIR}/${file}.json`;
+  const statusPath = path.join(STATUS_DIR, file);
   // 1) Try tmp status if exists
   if (fs.existsSync(statusPath)) {
     try {
