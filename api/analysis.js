@@ -155,7 +155,7 @@ export async function analyzeDocumentFull(text, originalName){
   // Full-text single-call analysis with GPT-5, temperature=1, no explicit token cap
   const reqMeta = { safeName: `${path.parse(originalName || "document").name}_full` };
   try { console.info(JSON.stringify({ event: 'analysis_model_request', meta: reqMeta })); } catch {}
-  const out = await chatCompletionWithOpts(messages, { model: 'gpt-5', temperature: 1 }, reqMeta);
+  const out = await chatCompletionWithOpts(messages, { model: 'gpt-5' }, reqMeta);
   return out;
 }
 

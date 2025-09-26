@@ -23,9 +23,9 @@ function normalizeEnvId(value) {
 }
 
 export const OPENAI_API_KEY = process.env.OPENAI_API_KEY || null;
-export const OPENAI_MODEL = getEnv("OPENAI_MODEL", "gpt-5-mini");
-export const OPENAI_MAX_TOKENS = Number(getEnv("OPENAI_MAX_TOKENS", "20000"));
-export const OPENAI_TEMPERATURE = Number(getEnv("OPENAI_TEMPERATURE", "0.2"));
+export const OPENAI_MODEL = getEnv("OPENAI_MODEL", "gpt-5");
+export const OPENAI_MAX_TOKENS = Number(getEnv("OPENAI_MAX_TOKENS", "2000"));
+export const OPENAI_TEMPERATURE = Number(getEnv("OPENAI_TEMPERATURE", "0"));
 
 export const NOTION_TOKEN = process.env.NOTION_TOKEN || null;
 export const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID || null;

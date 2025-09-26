@@ -462,6 +462,12 @@
       fileInfo.classList.remove('hidden');
       document.getElementById('analyze-btn').disabled=false;
     };
+    const isFullMode=()=>document.querySelector('input[name="analysis-mode"]:checked')?.value==='full';
+    const buildFormData=()=>{
+      const data=new FormData(formEl);
+      if(isFullMode()) data.append('fullText','1');
+      return data;
+    };
 
     ;['dragenter','dragover'].forEach(evt=>dz.addEventListener(evt,e=>{e.preventDefault();dz.classList.add('dragover');}));
     ;['dragleave','drop'].forEach(evt=>dz.addEventListener(evt,e=>{e.preventDefault();dz.classList.remove('dragover');}));
@@ -471,17 +477,31 @@
     const formEl = document.getElementById('upload-form');
     document.getElementById('upload-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const data = new FormData(formEl);
-      const modeFull = document.querySelector('input[name="analysis-mode"]:checked')?.value === 'full';
-      if (modeFull) { data.append('fullText','1'); }
-      // 1) Preview first
       try {
-        const prev = await fetch('/api/preview', { method:'POST', body:data });
-        const prevJson = await prev.json();
-        if(!prev.ok){ showToast('Ошибка предпросмотра: ' + (prevJson?.error||prev.status)); return; }
-        showPreview(prevJson);
+        const previewRes = await fetch('/api/preview', { method:'POST', body:buildFormData() });
+        if (previewRes.status === 401 || previewRes.status === 403) {
+          showToast('Предпросмотр недоступен. Запускаю анализ напрямую.');
+          await performUpload(buildFormData(), { skipPreview:true });
+          return;
+        }
+        let previewJson;
+        try { previewJson = await previewRes.clone().json(); }
+        catch {
+          const text = await previewRes.text();
+          showToast('Предпросмотр недоступен: ' + (text?.slice(0,120) || previewRes.status));
+          await performUpload(buildFormData(), { skipPreview:true });
+          return;
+        }
+        if(!previewRes.ok){
+          showToast('Предпросмотр недоступен: ' + (previewJson?.error||previewRes.status));
+          await performUpload(buildFormData(), { skipPreview:true });
+          return;
+        }
+        showPreview(previewJson);
       } catch (err) {
-        showToast('Ошибка предпросмотра');
+        console.warn('preview_failed', err);
+        showToast('Предпросмотр не отвечает. Анализ запускается напрямую.');
+        await performUpload(buildFormData(), { skipPreview:true });
       }
     });
 
@@ -491,7 +511,7 @@
       const sub=document.getElementById('preview-sub');
       const pretty = JSON.stringify(prevJson.messages, null, 2);
       body.textContent = pretty;
-      sub.textContent = `Режим: ${prevJson.mode==='full_text'?'Полный текст':'Стандартный'} • Модель: gpt-5 • Температура: 1`;
+      sub.textContent = `Режим: ${prevJson.mode==='full_text'?'Полный текст':'Стандартный'} • Модель: gpt-5`;
       modal.classList.add('show');
       // wire buttons
       const close=()=>modal.classList.remove('show');
@@ -499,43 +519,45 @@
       document.getElementById('preview-cancel').onclick=close;
       document.getElementById('preview-confirm').onclick=async()=>{
         close();
-        // proceed with actual upload
-        const data = new FormData(formEl);
-        const modeFull = document.querySelector('input[name="analysis-mode"]:checked')?.value === 'full';
-        if (modeFull) { data.append('fullText','1'); }
-        startProgress();
-        try {
-          const res = await fetch('/api/upload', { method: 'POST', body: data });
-          let payload = null;
-          try { payload = await res.clone().json(); }
-          catch {
-            const text = await res.text();
-            if(res.status===413){ showToast('Файл слишком большой. Уменьшите размер или сожмите.'); endProgress(); return; }
-            if(res.status===400){ showToast('Неверный тип файла. Разрешены PDF или DOCX.'); endProgress(); return; }
-            showToast('Ошибка: ' + (text?.slice(0, 200) || 'unknown'));
-            endProgress();
-            return;
-          }
-          const json = payload || {};
-          if (json.success) {
-            showToast('Анализ выполнен успешно');
-            loadHistory();
-            const txtAnalysis = json.analysis ?? '';
-            if(txtAnalysis){ renderAnalysis(txtAnalysis); }
-            else if(json.filename){ const ready = await waitForAnalysisReady(json.filename); if(ready){ renderAnalysis(ready); } }
-            setRetrievalChip(json.retrieval);
-            if(json.notion?.queued){ pollNotion(json.filename); } else { setNotionChip(null); }
-            if(json.filename){ const url=new URL(location); url.searchParams.set('file', json.filename); history.replaceState(null,'',url); }
-            endProgress();
-          } else {
-            showToast('Ошибка: ' + (json.error || 'unknown'));
-            endProgress();
-          }
-        } catch (err) {
-          showToast('Ошибка сети');
+        await performUpload(buildFormData());
+      };
+    }
+
+    async function performUpload(data, options={}){
+      startProgress();
+      try {
+        const res = await fetch('/api/upload', { method: 'POST', body: data });
+        let payload = null;
+        try { payload = await res.clone().json(); }
+        catch {
+          const text = await res.text();
+          if(res.status===413){ showToast('Файл слишком большой. Уменьшите размер или сожмите.'); endProgress(); return; }
+          if(res.status===400){ showToast('Неверный тип файла. Разрешены PDF или DOCX.'); endProgress(); return; }
+          showToast('Ошибка загрузки: ' + (text?.slice(0, 200) || 'unknown'));
+          endProgress();
+          return;
+        }
+        const json = payload || {};
+        if (json.success) {
+          if(options.skipPreview){ showToast('Предпросмотр недоступен, но анализ запущен.'); }
+          else { showToast('Анализ выполнен успешно'); }
+          loadHistory();
+          const txtAnalysis = json.analysis ?? '';
+          if(txtAnalysis){ renderAnalysis(txtAnalysis); }
+          else if(json.filename){ const ready = await waitForAnalysisReady(json.filename); if(ready){ renderAnalysis(ready); } }
+          setRetrievalChip(json.retrieval);
+          if(json.notion?.queued){ pollNotion(json.filename); } else { setNotionChip(null); }
+          if(json.filename){ const url=new URL(location); url.searchParams.set('file', json.filename); history.replaceState(null,'',url); }
+          endProgress();
+        } else {
+          showToast('Ошибка: ' + (json.error || 'unknown'));
           endProgress();
         }
-      };
+      } catch (err) {
+        console.warn('upload_failed', err);
+        showToast('Ошибка сети');
+        endProgress();
+      }
     }
 
     // Progress helpers
