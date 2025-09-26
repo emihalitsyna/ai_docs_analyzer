@@ -117,7 +117,9 @@ export default async function analyzeDocument(text, originalName) {
       { role: "system", content: PROMPT },
       { role: "user", content: text },
     ];
-    const out = await chatCompletion(messages);
+    const reqMeta = { safeName: `${path.parse(originalName || "document").name}_single` };
+    try { console.info(JSON.stringify({ event: 'analysis_model_request', meta: reqMeta })); } catch {}
+    const out = await chatCompletion(messages, reqMeta);
     return out;
   }
 
@@ -133,7 +135,9 @@ export default async function analyzeDocument(text, originalName) {
       { role: "user", content: part },
     ];
     try {
-      const resp = await chatCompletion(messages);
+      const reqMeta = { safeName: `${path.parse(originalName || "document").name}_chunk_${i + 1}` };
+      try { console.info(JSON.stringify({ event: 'analysis_model_request', meta: reqMeta })); } catch {}
+      const resp = await chatCompletion(messages, reqMeta);
       partials.push(resp);
     } catch {}
   }
@@ -149,7 +153,9 @@ export async function analyzeDocumentFull(text, originalName){
     { role: "user", content: text },
   ];
   // Full-text single-call analysis with GPT-5, temperature=1, no explicit token cap
-  const out = await chatCompletionWithOpts(messages, { model: 'gpt-5', temperature: 1 });
+  const reqMeta = { safeName: `${path.parse(originalName || "document").name}_full` };
+  try { console.info(JSON.stringify({ event: 'analysis_model_request', meta: reqMeta })); } catch {}
+  const out = await chatCompletionWithOpts(messages, { model: 'gpt-5', temperature: 1 }, reqMeta);
   return out;
 }
 

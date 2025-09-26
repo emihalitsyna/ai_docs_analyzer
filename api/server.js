@@ -473,16 +473,30 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
             length: text?.length ?? null,
           }));
         } catch {}
-        let analysisJsonStr = fullTextFlag
-          ? await analyzeDocumentFull(text, properName)
-          : await analyzeDocument(text, properName);
+        if (notionStatusFile) {
+          try { fs.writeFileSync(notionStatusFile, JSON.stringify({ status: "processing", step: "openai_start" })); } catch {}
+        }
+        let analysisJsonStr;
         try {
-          console.info(JSON.stringify({
-            event: 'analysis_model_response',
-            safeName,
-            chars: analysisJsonStr ? String(analysisJsonStr).length : null,
-          }));
-        } catch {}
+          analysisJsonStr = fullTextFlag
+            ? await analyzeDocumentFull(text, properName)
+            : await analyzeDocument(text, properName);
+          try {
+            console.info(JSON.stringify({
+              event: 'analysis_model_response',
+              safeName,
+              chars: analysisJsonStr ? String(analysisJsonStr).length : null,
+            }));
+          } catch {}
+          if (notionStatusFile) {
+            try { fs.writeFileSync(notionStatusFile, JSON.stringify({ status: "processing", step: "openai_success" })); } catch {}
+          }
+        } catch (modelErr) {
+          if (notionStatusFile) {
+            try { fs.writeFileSync(notionStatusFile, JSON.stringify({ status: "error", step: "openai_error", message: modelErr?.message || String(modelErr) })); } catch {}
+          }
+          throw modelErr;
+        }
         // Normalize
         analysisJsonStr = normalizeJsonString(analysisJsonStr);
         // If Blob URL is available, inject it when link field is empty/missing
