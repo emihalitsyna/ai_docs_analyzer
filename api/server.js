@@ -628,6 +628,7 @@ app.post("/api/preview", upload.single("document"), async (req, res) => {
 app.get("/api/analyses", async (req, res) => {
   try {
     const out = [];
+    const seen = new Set();
     // Notion-backed history (latest first)
     if (NOTION_TOKEN && NOTION_DATABASE_ID) {
       try {
@@ -655,8 +656,33 @@ app.get("/api/analyses", async (req, res) => {
         const getTs = (name)=>{ const m=name.match(/_(\d+)\.json$/); return m?Number(m[1]):0; };
         return getTs(b)-getTs(a);
       });
-      files.forEach((f)=> out.push({ source: 'local', filename: f }));
+      files.forEach((f)=> { out.push({ source: 'local', filename: f }); seen.add(f); });
     }
+
+    if (BLOB_READ_WRITE_TOKEN) {
+      try {
+        const { list } = await import('@vercel/blob');
+        let cursor = undefined;
+        for (let i = 0; i < 5; i++) {
+          const result = await list({ prefix: 'analyses/', token: BLOB_READ_WRITE_TOKEN, cursor, limit: 100 });
+          (result?.blobs || []).forEach((blob) => {
+            const name = (blob?.pathname || '').replace(/^analyses\//, '');
+            if (!name || seen.has(name)) return;
+            out.push({
+              source: 'blob',
+              filename: name,
+              uploadedAt: blob?.uploadedAt || null,
+            });
+            seen.add(name);
+          });
+          cursor = result?.cursor || null;
+          if (!cursor) break;
+        }
+      } catch (e) {
+        console.warn('blob_history_list_failed', e?.message || e);
+      }
+    }
+
     res.json(out);
   } catch (e) {
     res.status(500).json({ error: e.message });
