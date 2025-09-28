@@ -112,7 +112,7 @@
     <!-- Upload Section -->
     <section id="upload-section">
       <form id="upload-form">
-        <input type="file" id="file-input" name="document" accept="application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/csv,text/plain" hidden />
+        <input type="file" id="file-input" name="document" accept="application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden />
         <label id="drop-zone" for="file-input">
           <p id="drop-prompt">Выберите файл или перетащите сюда</p>
           <div id="file-info" class="hidden"></div>
@@ -406,11 +406,13 @@
     document.getElementById('confirm-save').onclick = async ()=>{
       const modal=document.getElementById('confirm-modal');
       const filename=modal.dataset.filename;
+      const textarea=document.getElementById('confirm-edit');
+      const edited = textarea.value;
       try {
         const res = await fetch('/api/confirm', {
           method:'POST',
           headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ filename })
+          body: JSON.stringify({ filename, analysis: edited })
         });
         const json = await res.json();
         if(!res.ok){ showToast('Ошибка сохранения: ' + (json.error||res.status)); return; }
@@ -439,7 +441,21 @@
         if(!res.ok){
           const text = await res.text();
           if(res.status===413){ showToast('Файл слишком большой. Уменьшите размер или сожмите.'); endProgress(); return; }
-          if(res.status===400){ showToast('Неверный тип файла. Разрешены PDF или DOCX.'); endProgress(); return; }
+          if(res.status===400){
+            try {
+              const errJson = JSON.parse(text);
+              if(errJson?.error){ showToast('Ошибка загрузки: ' + errJson.error); endProgress(); return; }
+            } catch {}
+            showToast('Неверный тип файла. Разрешены PDF или DOCX.'); endProgress(); return;
+          }
+          try {
+            const errJson = JSON.parse(text);
+            if(errJson?.error){
+              showToast('Ошибка загрузки: ' + errJson.error);
+              endProgress();
+              return;
+            }
+          } catch {}
           showToast('Ошибка загрузки: ' + (text?.slice(0, 200) || 'unknown'));
           endProgress();
           return;
