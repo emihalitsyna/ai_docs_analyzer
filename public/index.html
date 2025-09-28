@@ -160,6 +160,26 @@
         </div>
       </div>
     </div>
+
+    <!-- Confirm Modal -->
+    <div id="confirm-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;z-index:9999;display:none;">
+      <div style="background:#fff;max-width:600px;width:90%;max-height:80vh;overflow:auto;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.2);">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-weight:700;">Результат анализа</div>
+            <div id="confirm-sub" style="font-size:0.85rem;color:#666;"></div>
+          </div>
+          <button id="confirm-close" style="border:none;background:transparent;font-size:1.2rem;cursor:pointer;">✕</button>
+        </div>
+        <div style="padding:16px 20px;">
+          <pre id="confirm-body" style="white-space:pre-wrap;word-break:break-word;background:#f7f7f7;border:1px solid var(--border);padding:12px;border-radius:6px;max-height:40vh;overflow:auto;"></pre>
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end;">
+          <button id="confirm-cancel" class="btn" style="background:#eee;border:1px solid var(--border);padding:8px 14px;border-radius:8px;cursor:pointer;">Отменить</button>
+          <button id="confirm-save" class="btn-primary" style="background:var(--accent);color:#fff;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;">Сохранить в Notion</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -371,6 +391,7 @@
       const pill=document.getElementById('pill-notion');
       if(!state){ pill.textContent='Notion: n/a'; pill.className='chip info'; return; }
       if(state.status==='processing'){ pill.textContent='Notion: processing…'; pill.className='chip info'; return; }
+      if(state.status==='pending'){ pill.textContent='Notion: ждёт подтверждения'; pill.className='chip info'; return; }
       if(state.status==='success'){
         pill.textContent='Notion: success'; pill.className='chip ok';
         if(state.pageUrl){ const nl=document.getElementById('notion-link'); const na=document.getElementById('notion-a'); na.href=state.pageUrl; nl.classList.remove('hidden'); }
@@ -379,149 +400,37 @@
       if(state.status==='error'){ pill.textContent='Notion: error'; pill.className='chip bad'; return; }
       pill.textContent='Notion: unknown'; pill.className='chip info';
     }
-    async function pollNotion(filename){
-      setNotionChip({status:'processing'});
-      for(let i=0;i<30;i++){ // ~30s
-        try{
-          const r = await fetch(`/api/notion-status/${encodeURIComponent(filename)}`);
-          const s = await r.json();
-          if(s.status==='success' || s.status==='error'){
-            setNotionChip(s);
-            if(s.status==='success'){
-              if(s.pageUrl){ showBanner('Страница в Notion создана','Открыть', s.pageUrl); }
-              // Попробуем догрузить и отрисовать анализ
-              if(filename){ const ready = await waitForAnalysisReady(filename); if(ready){ renderAnalysis(ready); } }
-            }
-            return;
-          }
-        }catch{}
-        await new Promise(r=>setTimeout(r,1000));
-      }
-      setNotionChip({status:'unknown'});
-    }
 
-    async function waitForAnalysisReady(filename){
-      const container = document.getElementById('analysis-content');
-      container.textContent = 'Идёт анализ…';
-      for(let i=0;i<180;i++){ // до ~180с
-        try{
-          const r = await fetch(`/api/analyses/${encodeURIComponent(filename)}`);
-          if(!r.ok){ await new Promise(rs=>setTimeout(rs,1000)); continue; }
-          const txt = await r.text();
-          if(/Not found/i.test(txt)){ await new Promise(rs=>setTimeout(rs,1000)); continue; }
-          try{
-            const obj = JSON.parse(txt);
-            if(obj && obj.status==='processing'){ await new Promise(rs=>setTimeout(rs,1000)); continue; }
-            if(obj && obj.error){ container.textContent = 'Ошибка анализа: ' + obj.error; return txt; }
-          }catch{ /* not json -> treat as ready */ }
-          return txt;
-        }catch{}
-        await new Promise(rs=>setTimeout(rs,1000));
-      }
-      container.textContent = 'Анализ занимает больше обычного. Обновите страницу чуть позже.';
-      return null;
-    }
-
-    // Banner helpers
-    function showBanner(msg, actionText, actionHref){
-      const b=document.getElementById('banner');
-      const t=document.getElementById('banner-text');
-      const a=document.getElementById('banner-action');
-      const c=document.getElementById('banner-close');
-      t.textContent=msg;
-      if(actionHref){ a.style.display='inline-block'; a.textContent=actionText||'Открыть'; a.onclick=()=>window.open(actionHref,'_blank'); }
-      else { a.style.display='none'; }
-      b.style.display='flex';
-      c.onclick=()=>{ b.style.display='none'; };
-    }
-    (function initBannerFromQuery(){
-      const p=new URLSearchParams(location.search);
-      const n=p.get('notice');
-      if(n==='redeploy'){
-        showBanner('Переменные окружения обновлены. Нужен Redeploy.', 'Redeploy', 'https://vercel.com/dashboard');
-      }
-    })();
-
-    // Tab switching
-    document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{
-      document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-      btn.classList.add('active');
-      const tab=btn.dataset.tab;
-      document.getElementById('upload-section').classList.toggle('hidden',tab!=='upload');
-      document.getElementById('history-section').classList.toggle('hidden',tab!=='history');
-      if(tab==='history') loadHistory();
-    }));
-
-    // Drag & drop handling
-    const dz=document.getElementById('drop-zone');
-    const fileInput=document.getElementById('file-input');
-    const fileInfo=document.getElementById('file-info');
-
-    const showFileDetails=(file)=>{
-      fileInfo.innerHTML=`<strong>Файл:</strong> ${file.name}<br/><strong>Размер:</strong> ${(file.size/1024/1024).toFixed(2)} MB<br/><strong>Тип:</strong> ${file.type}`;
-      fileInfo.classList.remove('hidden');
-      document.getElementById('analyze-btn').disabled=false;
-    };
-    const isFullMode=()=>document.querySelector('input[name="analysis-mode"]:checked')?.value==='full';
-    const buildFormData=()=>{
-      const data=new FormData(formEl);
-      if(isFullMode()) data.append('fullText','1');
-      return data;
-    };
-
-    ;['dragenter','dragover'].forEach(evt=>dz.addEventListener(evt,e=>{e.preventDefault();dz.classList.add('dragover');}));
-    ;['dragleave','drop'].forEach(evt=>dz.addEventListener(evt,e=>{e.preventDefault();dz.classList.remove('dragover');}));
-    dz.addEventListener('drop',e=>{const f=e.dataTransfer.files[0]; if(f){fileInput.files=e.dataTransfer.files; showFileDetails(f);}});
-    fileInput.addEventListener('change',e=>{const f=e.target.files[0]; if(f) showFileDetails(f);});
-
-    const formEl = document.getElementById('upload-form');
-    document.getElementById('upload-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
+    document.getElementById('confirm-close').onclick = ()=>document.getElementById('confirm-modal').classList.remove('show');
+    document.getElementById('confirm-cancel').onclick = ()=>document.getElementById('confirm-modal').classList.remove('show');
+    document.getElementById('confirm-save').onclick = async ()=>{
+      const modal=document.getElementById('confirm-modal');
+      const filename=modal.dataset.filename;
       try {
-        const previewRes = await fetch('/api/preview', { method:'POST', body:buildFormData() });
-        if (previewRes.status === 401 || previewRes.status === 403) {
-          showToast('Предпросмотр недоступен. Запускаю анализ напрямую.');
-          await performUpload(buildFormData(), { skipPreview:true });
-          return;
+        const res = await fetch('/api/confirm', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ filename })
+        });
+        const json = await res.json();
+        if(!res.ok){ showToast('Ошибка сохранения: ' + (json.error||res.status)); return; }
+        showToast('Сохранено в Notion');
+        if(json.pageUrl){
+          const nl=document.getElementById('notion-link');
+          const na=document.getElementById('notion-a');
+          na.href=json.pageUrl; nl.classList.remove('hidden');
+          setNotionChip({status:'success', pageUrl:json.pageUrl});
+        } else {
+          setNotionChip({status:'success'});
         }
-        let previewJson;
-        try { previewJson = await previewRes.clone().json(); }
-        catch {
-          const text = await previewRes.text();
-          showToast('Предпросмотр недоступен: ' + (text?.slice(0,120) || previewRes.status));
-          await performUpload(buildFormData(), { skipPreview:true });
-          return;
-        }
-        if(!previewRes.ok){
-          showToast('Предпросмотр недоступен: ' + (previewJson?.error||previewRes.status));
-          await performUpload(buildFormData(), { skipPreview:true });
-          return;
-        }
-        showPreview(previewJson);
-      } catch (err) {
-        console.warn('preview_failed', err);
-        showToast('Предпросмотр не отвечает. Анализ запускается напрямую.');
-        await performUpload(buildFormData(), { skipPreview:true });
+        modal.classList.remove('show');
+        loadHistory();
+      } catch(err){
+        console.warn('confirm_failed', err);
+        showToast('Ошибка при подтверждении');
+        setNotionChip({status:'error'});
       }
-    });
-
-    function showPreview(prevJson){
-      const modal=document.getElementById('preview-modal');
-      const body=document.getElementById('preview-body');
-      const sub=document.getElementById('preview-sub');
-      const pretty = JSON.stringify(prevJson.messages, null, 2);
-      body.textContent = pretty;
-      sub.textContent = `Режим: ${prevJson.mode==='full_text'?'Полный текст':'Стандартный'} • Модель: gpt-5`;
-      modal.classList.add('show');
-      // wire buttons
-      const close=()=>modal.classList.remove('show');
-      document.getElementById('preview-close').onclick=close;
-      document.getElementById('preview-cancel').onclick=close;
-      document.getElementById('preview-confirm').onclick=async()=>{
-        close();
-        await performUpload(buildFormData());
-      };
-    }
+    };
 
     async function performUpload(data, options={}){
       startProgress();
@@ -537,18 +446,18 @@
         }
         const json = await res.json();
         if (json.success) {
-          showToast('Анализ выполнен успешно');
+          showToast('Анализ выполнен. Проверьте результат перед сохранением.');
           loadHistory();
-          const analysisData = json.analysis;
-          if(analysisData){ renderAnalysis(analysisData); }
+          renderAnalysis(json.analysis);
           setRetrievalChip(json.retrieval);
-          if(json.notion?.status==='success'){ setNotionChip({status:'success', pageUrl: json.notion.pageUrl}); }
-          else { setNotionChip(json.notion); }
+          setNotionChip(json.notion);
+          if(json.upload?.url){ document.getElementById('notion-link').classList.add('hidden'); }
           if(json.filename){
             const url=new URL(location);
             url.searchParams.set('file', json.filename);
             history.replaceState(null,'',url);
           }
+          showAnalysisModal(json);
           endProgress();
         } else {
           showToast('Ошибка: ' + (json.error || 'unknown'));
