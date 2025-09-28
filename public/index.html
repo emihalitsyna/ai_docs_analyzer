@@ -527,9 +527,7 @@
       startProgress();
       try {
         const res = await fetch('/api/upload', { method: 'POST', body: data });
-        let payload = null;
-        try { payload = await res.clone().json(); }
-        catch {
+        if(!res.ok){
           const text = await res.text();
           if(res.status===413){ showToast('Файл слишком большой. Уменьшите размер или сожмите.'); endProgress(); return; }
           if(res.status===400){ showToast('Неверный тип файла. Разрешены PDF или DOCX.'); endProgress(); return; }
@@ -537,17 +535,20 @@
           endProgress();
           return;
         }
-        const json = payload || {};
+        const json = await res.json();
         if (json.success) {
-          if(options.skipPreview){ showToast('Предпросмотр недоступен, но анализ запущен.'); }
-          else { showToast('Анализ выполнен успешно'); }
+          showToast('Анализ выполнен успешно');
           loadHistory();
-          const txtAnalysis = json.analysis ?? '';
-          if(txtAnalysis){ renderAnalysis(txtAnalysis); }
-          else if(json.filename){ const ready = await waitForAnalysisReady(json.filename); if(ready){ renderAnalysis(ready); } }
+          const analysisData = json.analysis;
+          if(analysisData){ renderAnalysis(analysisData); }
           setRetrievalChip(json.retrieval);
-          if(json.notion?.queued){ pollNotion(json.filename); } else { setNotionChip(null); }
-          if(json.filename){ const url=new URL(location); url.searchParams.set('file', json.filename); history.replaceState(null,'',url); }
+          if(json.notion?.status==='success'){ setNotionChip({status:'success', pageUrl: json.notion.pageUrl}); }
+          else { setNotionChip(json.notion); }
+          if(json.filename){
+            const url=new URL(location);
+            url.searchParams.set('file', json.filename);
+            history.replaceState(null,'',url);
+          }
           endProgress();
         } else {
           showToast('Ошибка: ' + (json.error || 'unknown'));

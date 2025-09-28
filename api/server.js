@@ -436,275 +436,265 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
       }
     }
 
-    // Respond immediately; start background analysis
-    res.json({
-      success: true,
-      filename: safeName,
-      notionPageId: null,
-      analysis: null,
-      retrieval: { vectorStore: usedVectorStoreId, assistant: OPENAI_ASSISTANT_ID ? true : false },
-      retrievalFiles: retrievalFilesSummary,
-      notion: { queued: !!(NOTION_TOKEN && NOTION_DATABASE_ID) },
-      upload: { blob: !!originalUrl, url: originalUrl },
-      mode: fullTextFlag ? 'full_text' : 'standard'
-    });
+    // Полностью синхронная обработка: выполняем анализ до ответа
+    const startedAt = Date.now();
+    const context = {
+      event: 'analysis_background_start',
+      filename: properName,
+      safeName,
+      mode: fullTextFlag ? 'full_text' : 'standard',
+      mimetype,
+      size: fileRec?.size ?? null,
+    };
+    try { console.info(JSON.stringify(context)); } catch {}
 
-    // ---- Background work ----
-    (async () => {
-      const startedAt = Date.now();
-      const context = {
-        event: 'analysis_background_start',
-        filename: properName,
-        safeName,
-        mode: fullTextFlag ? 'full_text' : 'standard',
-        mimetype,
-        size: fileRec?.size ?? null,
-      };
+    let notionPageUrl = null;
+    let notionPageId = null;
+    let analysisJsonStr;
+
+    const finalize = () => {
+      if (req.file?.path) { fs.unlink(req.file.path, () => {}); }
       try {
-        console.info(JSON.stringify(context));
+        console.info(JSON.stringify({
+          event: 'analysis_background_finished',
+          safeName,
+          durationMs: Date.now() - startedAt,
+        }));
       } catch {}
+    };
+
+    try {
+      const text = await extractText(filePath, mimetype);
       try {
-        // 1) Extract full text and analyze (branch by mode)
-        const text = await extractText(filePath, mimetype);
-        try {
-          console.info(JSON.stringify({
-            event: 'analysis_text_extracted',
-            safeName,
-            length: text?.length ?? null,
-          }));
-        } catch {}
+        console.info(JSON.stringify({
+          event: 'analysis_text_extracted',
+          safeName,
+          length: text?.length ?? null,
+        }));
+      } catch {}
+      if (notionStatusFile) {
+        try { fs.writeFileSync(notionStatusFile, JSON.stringify({ status: "processing", step: "openai_start" })); } catch {}
+      }
+
+      analysisJsonStr = fullTextFlag
+        ? await analyzeDocumentFull(text, properName)
+        : await analyzeDocument(text, properName);
+
+      const rawPreview = (() => {
+        if (analysisJsonStr === null || analysisJsonStr === undefined) return null;
+        const str = String(analysisJsonStr);
+        return str.length > 200 ? str.slice(0, 200) : str;
+      })();
+      try {
+        console.info(JSON.stringify({
+          event: 'analysis_model_raw',
+          safeName,
+          preview: rawPreview,
+        }));
+      } catch {}
+
+      const rawPath = path.join(outDir, safeName.replace(/\.json$/i, '') + '.raw.txt');
+      try { fs.writeFileSync(rawPath, String(analysisJsonStr ?? ''), 'utf-8'); }
+      catch (rawErr) { console.warn('analysis_raw_write_failed', rawErr?.message || rawErr); }
+
+      try {
+        console.info(JSON.stringify({
+          event: 'analysis_model_response',
+          safeName,
+          chars: analysisJsonStr ? String(analysisJsonStr).length : null,
+        }));
+      } catch {}
+
+      if (notionStatusFile) {
+        try { fs.writeFileSync(notionStatusFile, JSON.stringify({ status: "processing", step: "openai_success" })); } catch {}
+      }
+
+      analysisJsonStr = normalizeJsonString(analysisJsonStr);
+      try {
+        const obj = JSON.parse(analysisJsonStr);
+        const linkSnake = typeof obj['ссылка_на_оригинальное_тз'] === 'string' ? obj['ссылка_на_оригинальное_тз'] : '';
+        if (originalUrl && !linkSnake) obj['ссылка_на_оригинальное_тз'] = originalUrl;
+        analysisJsonStr = JSON.stringify(obj);
+      } catch {}
+
+      if (!analysisJsonStr || analysisJsonStr === '{}' || !String(analysisJsonStr).trim()) {
+        const msg = { status: "error", step: "analysis_empty", message: "OpenAI returned empty analysis" };
+        try { fs.writeFileSync(outPath, JSON.stringify(msg), 'utf-8'); } catch {}
         if (notionStatusFile) {
-          try { fs.writeFileSync(notionStatusFile, JSON.stringify({ status: "processing", step: "openai_start" })); } catch {}
+          try { fs.writeFileSync(notionStatusFile, JSON.stringify({ ...msg })); } catch {}
         }
-        let analysisJsonStr;
-        try {
-          analysisJsonStr = fullTextFlag
-            ? await analyzeDocumentFull(text, properName)
-            : await analyzeDocument(text, properName);
-          const rawPreview = (() => {
-            if (analysisJsonStr === null || analysisJsonStr === undefined) return null;
-            const str = String(analysisJsonStr);
-            return str.length > 200 ? str.slice(0, 200) : str;
-          })();
-          try {
-            console.info(JSON.stringify({
-              event: 'analysis_model_raw',
-              safeName,
-              preview: rawPreview,
-            }));
-          } catch {}
-          const rawPath = path.join(outDir, safeName.replace(/\.json$/i, '') + '.raw.txt');
-          try {
-            fs.writeFileSync(rawPath, String(analysisJsonStr ?? ''), 'utf-8');
-          } catch (rawErr) {
-            console.warn('analysis_raw_write_failed', rawErr?.message || rawErr);
-          }
-          try {
-            console.info(JSON.stringify({
-              event: 'analysis_model_response',
-              safeName,
-              chars: analysisJsonStr ? String(analysisJsonStr).length : null,
-            }));
-          } catch {}
-          if (notionStatusFile) {
-            try { fs.writeFileSync(notionStatusFile, JSON.stringify({ status: "processing", step: "openai_success" })); } catch {}
-          }
-        } catch (modelErr) {
-          if (notionStatusFile) {
-            try { fs.writeFileSync(notionStatusFile, JSON.stringify({ status: "error", step: "openai_error", message: modelErr?.message || String(modelErr) })); } catch {}
-          }
-          throw modelErr;
-        }
-        // Normalize
-        analysisJsonStr = normalizeJsonString(analysisJsonStr);
-        // If Blob URL is available, inject it when link field is empty/missing
-        try {
-          const obj = JSON.parse(analysisJsonStr);
-          const linkSnake = typeof obj['ссылка_на_оригинальное_тз'] === 'string' ? obj['ссылка_на_оригинальное_тз'] : '';
-          if (originalUrl && !linkSnake) obj['ссылка_на_оригинальное_тз'] = originalUrl;
-          analysisJsonStr = JSON.stringify(obj);
-        } catch {}
-        if (analysisJsonStr && analysisJsonStr !== '{}' && String(analysisJsonStr).trim() !== '') {
-          fs.writeFileSync(outPath, analysisJsonStr, "utf-8");
-          try {
-            console.info(JSON.stringify({ event: 'analysis_saved_local', safeName }));
-          } catch {}
-          if (notionStatusFile) {
-            try { fs.writeFileSync(notionStatusFile, JSON.stringify({ status: "processing", step: "analysis_complete" })); } catch {}
-          }
-        } else {
-          const msg = { status: "error", step: "analysis_empty", message: "OpenAI returned empty analysis" };
-          try { fs.writeFileSync(outPath, JSON.stringify(msg), "utf-8"); } catch {}
-          if (notionStatusFile) {
-            try { fs.writeFileSync(notionStatusFile, JSON.stringify({ ...msg })); } catch {}
-          }
-          try {
-            console.warn(JSON.stringify({ event: 'analysis_empty', safeName }));
-          } catch {}
-          return;
-        }
-        
+        try { console.warn(JSON.stringify({ event: 'analysis_empty', safeName })); } catch {}
+        throw new Error('OpenAI returned empty analysis');
+      }
 
-        // Also persist analysis to durable storage (Vercel Blob) for serverless environments
-        try {
-          if (BLOB_READ_WRITE_TOKEN) {
-            const { put } = await import('@vercel/blob');
-            await put(`analyses/${safeName}`, analysisJsonStr, {
-              access: 'public',
-              token: BLOB_READ_WRITE_TOKEN,
-              contentType: 'application/json; charset=utf-8'
-            });
-            try {
-              console.info(JSON.stringify({ event: 'analysis_saved_blob', safeName }));
-            } catch {}
-          }
-        } catch (e) {
-          console.warn('blob_upload_analysis_failed', e?.message || e);
-        }
+      fs.writeFileSync(outPath, analysisJsonStr, 'utf-8');
+      try { console.info(JSON.stringify({ event: 'analysis_saved_local', safeName })); } catch {}
+      if (notionStatusFile) {
+        try { fs.writeFileSync(notionStatusFile, JSON.stringify({ status: "processing", step: "analysis_complete" })); } catch {}
+      }
 
-        // 2) Notion export with detailed status logging
-        if (NOTION_TOKEN && NOTION_DATABASE_ID) {
-          const statusFile = notionStatusFile;
-          try { fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "init" })); } catch {}
-          const notion = new NotionClient({ auth: NOTION_TOKEN });
-          try {
-            fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "ensure_schema" }));
-            const dbProps = await ensureNotionSchema(notion);
-            try {
-              console.info(JSON.stringify({ event: 'notion_schema_ready', safeName }));
-            } catch {}
-            const hasFileKeyProp = !!dbProps?.['FileKey'];
-            const hasDateProp = !!dbProps?.['Дата загрузки'];
-            const hasTypeProp = !!dbProps?.['Тип документа'];
-            const hasStatusProp = !!dbProps?.['Статус'];
-            const hasDescrProp = !!dbProps?.['Описание'];
-            const hasFilesProp = !!dbProps?.['Ссылки и файлы'];
-
-            let parsed = {}; try { parsed = JSON.parse(analysisJsonStr); } catch {}
-            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-              const alt = parseTextAnalysisToData(analysisJsonStr);
-              if (alt) parsed = alt;
-            }
-            const norm = {}; Object.entries(parsed || {}).forEach(([k, v]) => { norm[String(k).toLowerCase().replace(/\s+/g, "_")] = v; });
-            let titleText = '';
-            const customer = norm['наименование_компании_заказчика'] ?? norm['заказчик'];
-            if (Array.isArray(customer)) titleText = customer.filter(Boolean)[0] || '';
-            else if (typeof customer === 'string') titleText = customer;
-            if (!titleText) { titleText = extractCustomerFromText(analysisJsonStr); }
-            titleText = normalizeCompanyName(titleText || properName);
-            const descrProp = typeof norm["описание_документа"] === "string" ? norm["описание_документа"] : "";
-            const linkProp0 = typeof norm["ссылка_на_оригинальное_тз"] === "string" ? norm["ссылка_на_оригинальное_тз"] : "";
-            const finalLink = linkProp0 || originalUrl || "";
-
-            const resolveSelect = (propName, preferred) => {
-              const opts = (dbProps?.[propName]?.select?.options || []).map(o => o?.name).filter(Boolean);
-              if (!opts.length) return null;
-              if (preferred && opts.includes(preferred)) return preferred;
-              return opts[0] || null;
-            };
-            const mimeToType = () => {
-              if (mimetype.includes('pdf')) return 'PDF';
-              if (mimetype.includes('word') || mimetype.includes('officedocument')) return 'DOCX';
-              if (mimetype.includes('csv')) return 'CSV';
-              return 'TXT';
-            };
-            const docTypeValue = hasTypeProp ? resolveSelect('Тип документа', mimeToType()) : null;
-            const statusValue = hasStatusProp ? resolveSelect('Статус', 'Новый') : null;
-
-            const pageProps = {
-              Name: { title: [{ text: { content: titleText.slice(0, 200) } }] },
-            };
-            if (hasDateProp) pageProps["Дата загрузки"] = { date: { start: new Date().toISOString() } };
-            if (docTypeValue) pageProps["Тип документа"] = { select: { name: docTypeValue } };
-            if (statusValue) pageProps["Статус"] = { select: { name: statusValue } };
-            if (hasFileKeyProp) pageProps["FileKey"] = { rich_text: [{ text: { content: safeName } }] };
-            if (hasDescrProp && descrProp) pageProps["Описание"] = { rich_text: chunkRichText(String(descrProp)) };
-            if (hasFilesProp && finalLink) pageProps["Ссылки и файлы"] = { files: [{ name: properName, external: { url: finalLink } }] };
-
-            const contactsProp = dbProps?.['Контакты'] ? 'Контакты' : null;
-            const upgradesProp = dbProps?.['Доработки'] ? 'Доработки' : null;
-            const mappingProp = dbProps?.['Сопоставление с Dbrain'] ? 'Сопоставление с Dbrain' : null;
-            const contacts = norm['контактные_лица'];
-            if (contactsProp && Array.isArray(contacts) && contacts.length) {
-              const text = contacts.map(c => {
-                if (c && typeof c === 'object') return [c.фио, c.роль, c.email, c.телефон].filter(Boolean).join(' — ');
-                return String(c);
-              }).join('\n');
-              pageProps[contactsProp] = { rich_text: chunkRichText(text) };
-            }
-            const upgrades = norm['требуемые_доработки'];
-            if (upgradesProp && Array.isArray(upgrades) && upgrades.length) {
-              const text = upgrades.map(u => {
-                if (u && typeof u === 'object') return [u.описание, u.приоритет, u.оценка_сложности].filter(Boolean).join(' — ');
-                return String(u);
-              }).join('\n');
-              pageProps[upgradesProp] = { rich_text: chunkRichText(text) };
-            }
-            const mapping = norm['сопоставление_с_dbrain'];
-            if (mappingProp && Array.isArray(mapping) && mapping.length) {
-              const text = mapping.map(m => {
-                if (m && typeof m === 'object') return [m.требование, m.статус, m.комментарий, m.цитата ? `«${m.цитата}»` : null].filter(Boolean).join(' — ');
-                return String(m);
-              }).join('\n');
-              pageProps[mappingProp] = { rich_text: chunkRichText(text) };
-            }
-
-            fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "pages.create", title: pageProps?.Name?.title?.[0]?.text?.content || null }));
-            const blocks = buildNotionBlocksFromAnalysis(analysisJsonStr);
-            const first = blocks.slice(0, 50);
-            const rest = blocks.slice(50);
-            const page = await notion.pages.create({ parent: { database_id: NOTION_DATABASE_ID }, properties: pageProps, children: first });
-            try {
-              console.info(JSON.stringify({ event: 'notion_page_created', safeName, pageId: page?.id || null }));
-            } catch {}
-            for (let i = 0; i < rest.length; i += 90) {
-              const slice = rest.slice(i, i + 90);
-              try { await notion.blocks.children.append({ block_id: page.id, children: slice }); } catch (errAppend) {
-                try { fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "append_error", message: String(errAppend?.message || errAppend) })); } catch {}
-                console.warn('notion_append_error', errAppend?.message || errAppend);
-              }
-            }
-            if (originalUrl) {
-              try {
-                await notion.blocks.children.append({ block_id: page.id, children: [{ object: 'block', type: 'file', file: { type: 'external', external: { url: originalUrl } } }] });
-              } catch (errFile) {
-                try { fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "file_block_error", message: String(errFile?.message || errFile) })); } catch {}
-                console.warn('notion_file_block_error', errFile?.message || errFile);
-              }
-            }
-            try { await notion.pages.update({ page_id: page.id, properties: { Статус: { select: { name: "Готово" } } } }); } catch (errUpd) {
-              try { fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "status_update_error", message: String(errUpd?.message || errUpd) })); } catch {}
-              console.warn('notion_status_update_error', errUpd?.message || errUpd);
-            }
-            const pageUrl = `https://www.notion.so/${String(page.id).replace(/-/g, '')}`;
-            fs.writeFileSync(statusFile, JSON.stringify({ status: "success", pageId: page.id, pageUrl }));
-            try {
-              console.info(JSON.stringify({ event: 'notion_success', safeName, pageId: page.id, pageUrl }));
-            } catch {}
-          } catch (notionErr) {
-            try { fs.writeFileSync(statusFile, JSON.stringify({ status: "error", step: "outer", message: notionErr?.message || String(notionErr) })); } catch {}
-            console.error('notion_export_error', notionErr);
-          }
+      try {
+        if (BLOB_READ_WRITE_TOKEN) {
+          const { put } = await import('@vercel/blob');
+          await put(`analyses/${safeName}`, analysisJsonStr, {
+            access: 'public',
+            token: BLOB_READ_WRITE_TOKEN,
+            contentType: 'application/json; charset=utf-8'
+          });
+          try { console.info(JSON.stringify({ event: 'analysis_saved_blob', safeName })); } catch {}
         }
       } catch (e) {
-        // Write error into file
-        try { fs.writeFileSync(outPath, JSON.stringify({ error: e.message }), "utf-8"); } catch {}
-        if (notionStatusFile) {
-          try { fs.writeFileSync(notionStatusFile, JSON.stringify({ status: "error", step: "analysis", message: e?.message || String(e) })); } catch {}
-        }
-        console.error('analysis_background_error', e);
-      } finally {
-        // Cleanup temp upload file
-        if (req.file?.path) { fs.unlink(req.file.path, () => {}); }
-        try {
-          console.info(JSON.stringify({
-            event: 'analysis_background_finished',
-            safeName,
-            durationMs: Date.now() - startedAt,
-          }));
-        } catch {}
+        console.warn('blob_upload_analysis_failed', e?.message || e);
       }
-    })();
+
+      if (NOTION_TOKEN && NOTION_DATABASE_ID) {
+        const statusFile = notionStatusFile;
+        try { fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "init" })); } catch {}
+        const notion = new NotionClient({ auth: NOTION_TOKEN });
+        try {
+          fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "ensure_schema" }));
+          const dbProps = await ensureNotionSchema(notion);
+          try { console.info(JSON.stringify({ event: 'notion_schema_ready', safeName })); } catch {}
+          const hasFileKeyProp = !!dbProps?.['FileKey'];
+          const hasDateProp = !!dbProps?.['Дата загрузки'];
+          const hasTypeProp = !!dbProps?.['Тип документа'];
+          const hasStatusProp = !!dbProps?.['Статус'];
+          const hasDescrProp = !!dbProps?.['Описание'];
+          const hasFilesProp = !!dbProps?.['Ссылки и файлы'];
+
+          let parsed = {}; try { parsed = JSON.parse(analysisJsonStr); } catch {}
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            const alt = parseTextAnalysisToData(analysisJsonStr);
+            if (alt) parsed = alt;
+          }
+          const norm = {}; Object.entries(parsed || {}).forEach(([k, v]) => { norm[String(k).toLowerCase().replace(/\s+/g, '_')] = v; });
+          let titleText = '';
+          const customer = norm['наименование_компании_заказчика'] ?? norm['заказчик'];
+          if (Array.isArray(customer)) titleText = customer.filter(Boolean)[0] || '';
+          else if (typeof customer === 'string') titleText = customer;
+          if (!titleText) { titleText = extractCustomerFromText(analysisJsonStr); }
+          titleText = normalizeCompanyName(titleText || properName);
+          const descrProp = typeof norm['описание_документа'] === 'string' ? norm['описание_документа'] : '';
+          const linkProp0 = typeof norm['ссылка_на_оригинальное_тз'] === 'string' ? norm['ссылка_на_оригинальное_тз'] : '';
+          const finalLink = linkProp0 || originalUrl || '';
+
+          const resolveSelect = (propName, preferred) => {
+            const opts = (dbProps?.[propName]?.select?.options || []).map(o => o?.name).filter(Boolean);
+            if (!opts.length) return null;
+            if (preferred && opts.includes(preferred)) return preferred;
+            return opts[0] || null;
+          };
+          const mimeToType = () => {
+            if (mimetype.includes('pdf')) return 'PDF';
+            if (mimetype.includes('word') || mimetype.includes('officedocument')) return 'DOCX';
+            if (mimetype.includes('csv')) return 'CSV';
+            return 'TXT';
+          };
+          const docTypeValue = hasTypeProp ? resolveSelect('Тип документа', mimeToType()) : null;
+          const statusValue = hasStatusProp ? resolveSelect('Статус', 'Новый') : null;
+
+          const pageProps = {
+            Name: { title: [{ text: { content: titleText.slice(0, 200) } }] },
+          };
+          if (hasDateProp) pageProps['Дата загрузки'] = { date: { start: new Date().toISOString() } };
+          if (docTypeValue) pageProps['Тип документа'] = { select: { name: docTypeValue } };
+          if (statusValue) pageProps['Статус'] = { select: { name: statusValue } };
+          if (hasFileKeyProp) pageProps['FileKey'] = { rich_text: [{ text: { content: safeName } }] };
+          if (hasDescrProp && descrProp) pageProps['Описание'] = { rich_text: chunkRichText(String(descrProp)) };
+          if (hasFilesProp && finalLink) pageProps['Ссылки и файлы'] = { files: [{ name: properName, external: { url: finalLink } }] };
+
+          const contactsProp = dbProps?.['Контакты'] ? 'Контакты' : null;
+          const upgradesProp = dbProps?.['Доработки'] ? 'Доработки' : null;
+          const mappingProp = dbProps?.['Сопоставление с Dbrain'] ? 'Сопоставление с Dbrain' : null;
+          const contacts = norm['контактные_лица'];
+          if (contactsProp && Array.isArray(contacts) && contacts.length) {
+            const textValue = contacts.map(c => {
+              if (c && typeof c === 'object') return [c.фио, c.роль, c.email, c.телефон].filter(Boolean).join(' — ');
+              return String(c);
+            }).join('\n');
+            pageProps[contactsProp] = { rich_text: chunkRichText(textValue) };
+          }
+          const upgrades = norm['требуемые_доработки'];
+          if (upgradesProp && Array.isArray(upgrades) && upgrades.length) {
+            const textValue = upgrades.map(u => {
+              if (u && typeof u === 'object') return [u.описание, u.приоритет, u.оценка_сложности].filter(Boolean).join(' — ');
+              return String(u);
+            }).join('\n');
+            pageProps[upgradesProp] = { rich_text: chunkRichText(textValue) };
+          }
+          const mapping = norm['сопоставление_с_dbrain'];
+          if (mappingProp && Array.isArray(mapping) && mapping.length) {
+            const textValue = mapping.map(m => {
+              if (m && typeof m === 'object') return [m.требование, m.статус, m.комментарий, m.цитата ? `«${m.цитата}»` : null].filter(Boolean).join(' — ');
+              return String(m);
+            }).join('\n');
+            pageProps[mappingProp] = { rich_text: chunkRichText(textValue) };
+          }
+
+          fs.writeFileSync(statusFile, JSON.stringify({ status: "processing", step: "pages.create", title: pageProps?.Name?.title?.[0]?.text?.content || null }));
+          const blocks = buildNotionBlocksFromAnalysis(analysisJsonStr);
+          const first = blocks.slice(0, 50);
+          const rest = blocks.slice(50);
+          const page = await notion.pages.create({ parent: { database_id: NOTION_DATABASE_ID }, properties: pageProps, children: first });
+          notionPageId = page?.id || null;
+          notionPageUrl = notionPageId ? `https://www.notion.so/${String(notionPageId).replace(/-/g,'')}` : null;
+          try { console.info(JSON.stringify({ event: 'notion_page_created', safeName, pageId: notionPageId })); } catch {}
+          if (rest.length) {
+            for (let i = 0; i < rest.length; i += 50) {
+              const chunk = rest.slice(i, i + 50);
+              try {
+                await notion.blocks.children.append({ block_id: page.id, children: chunk });
+              } catch (appendErr) {
+                console.error('notion_append_error', appendErr);
+              }
+            }
+          }
+          if (statusValue && statusValue !== 'Готово' && pageProps['Статус']) {
+            try {
+              await notion.pages.update({
+                page_id: page.id,
+                properties: {
+                  ...pageProps,
+                  'Статус': { select: { name: 'Готово' } },
+                }
+              });
+            } catch (updateErr) {
+              console.error('notion_status_update_failed', updateErr?.message || updateErr);
+            }
+          }
+          try { fs.writeFileSync(statusFile, JSON.stringify({ status: 'success', pageId: notionPageId, pageUrl: notionPageUrl })); } catch {}
+        } catch (notionErr) {
+          try { fs.writeFileSync(statusFile, JSON.stringify({ status: 'error', step: 'notion', message: notionErr?.message || String(notionErr) })); } catch {}
+          console.error('notion_export_error', notionErr);
+        }
+      }
+
+      let analysisPayload = null;
+      try { analysisPayload = JSON.parse(analysisJsonStr); } catch {}
+
+      res.json({
+        success: true,
+        filename: safeName,
+        analysis: analysisPayload || analysisJsonStr,
+        notion: notionPageUrl ? { status: 'success', pageUrl: notionPageUrl, pageId: notionPageId } : { status: NOTION_TOKEN && NOTION_DATABASE_ID ? 'skipped' : 'disabled' },
+        retrieval: { vectorStore: usedVectorStoreId, assistant: OPENAI_ASSISTANT_ID ? true : false },
+        retrievalFiles: retrievalFilesSummary,
+        upload: { blob: !!originalUrl, url: originalUrl },
+        mode: fullTextFlag ? 'full_text' : 'standard',
+        durationMs: Date.now() - startedAt
+      });
+    } catch (e) {
+      console.error('analysis_upload_error', e);
+      try { fs.writeFileSync(outPath, JSON.stringify({ error: e.message }), 'utf-8'); } catch {}
+      if (notionStatusFile) {
+        try { fs.writeFileSync(notionStatusFile, JSON.stringify({ status: 'error', step: 'analysis', message: e?.message || String(e) })); } catch {}
+      }
+      if (!res.headersSent) {
+        res.status(500).json({ error: e?.message || 'Analysis failed' });
+      }
+    } finally {
+      finalize();
+    }
 
   } catch (err) {
     console.error(err);
