@@ -171,8 +171,9 @@
           </div>
           <button id="confirm-close" style="border:none;background:transparent;font-size:1.2rem;cursor:pointer;">✕</button>
         </div>
-        <div style="padding:16px 20px;">
-          <pre id="confirm-body" style="white-space:pre-wrap;word-break:break-word;background:#f7f7f7;border:1px solid var(--border);padding:12px;border-radius:6px;max-height:40vh;overflow:auto;"></pre>
+        <div style="padding:16px 20px;display:flex;flex-direction:column;gap:10px;">
+          <pre id="confirm-body" style="white-space:pre-wrap;word-break:break-word;background:#f7f7f7;border:1px solid var(--border);padding:12px;border-radius:6px;max-height:30vh;overflow:auto;"></pre>
+          <textarea id="confirm-edit" style="width:100%;min-height:140px;border:1px solid var(--border);border-radius:6px;padding:8px;font-family:monospace;resize:vertical;" placeholder="Отредактируйте JSON перед экспортом в Notion"></textarea>
         </div>
         <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end;">
           <button id="confirm-cancel" class="btn" style="background:#eee;border:1px solid var(--border);padding:8px 14px;border-radius:8px;cursor:pointer;">Отменить</button>
@@ -233,6 +234,70 @@
       t.style.opacity = 1;
       setTimeout(() => { t.style.opacity = 0; }, 3000);
     }
+
+    function setSelectedFile(file){
+      const info=document.getElementById('file-info');
+      if(!file){
+        info.classList.add('hidden');
+        info.textContent='';
+        document.getElementById('analyze-btn').disabled=true;
+        document.getElementById('drop-prompt').textContent='Выберите файл или перетащите сюда';
+        return;
+      }
+      info.classList.remove('hidden');
+      info.textContent=`${file.name} (${(file.size/1024/1024).toFixed(2)} MB)`;
+      document.getElementById('drop-prompt').textContent='Файл выбран, нажмите «Загрузить и проанализировать»';
+      document.getElementById('analyze-btn').disabled=false;
+    }
+
+    const fileInput=document.getElementById('file-input');
+    const dropZone=document.getElementById('drop-zone');
+
+    const checkFile=(file)=>{
+      if(!file) return false;
+      const allowed=['application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+      const ext=(file.name||'').toLowerCase();
+      const okMime=allowed.includes(file.type);
+      const okExt=ext.endsWith('.pdf')||ext.endsWith('.docx');
+      if(!okMime && !okExt){
+        showToast('Поддерживаются только PDF и DOCX');
+        return false;
+      }
+      return true;
+    };
+
+    fileInput.addEventListener('change',(e)=>{
+      const file=e.target.files?.[0];
+      if(file && !checkFile(file)){
+        fileInput.value='';
+        setSelectedFile(null);
+        return;
+      }
+      setSelectedFile(file||null);
+    });
+
+    ['dragenter','dragover'].forEach(evt=>{
+      dropZone.addEventListener(evt,(e)=>{
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+      });
+    });
+    ['dragleave','drop'].forEach(evt=>{
+      dropZone.addEventListener(evt,(e)=>{
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+      });
+    });
+    dropZone.addEventListener('drop',(e)=>{
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      const file=e.dataTransfer?.files?.[0];
+      if(file){
+        if(!checkFile(file)) return;
+        fileInput.files=e.dataTransfer?.files;
+        setSelectedFile(file);
+      }
+    });
 
     function renderAnalysis(raw) {
       const container = document.getElementById('analysis-content');
@@ -401,6 +466,40 @@
       pill.textContent='Notion: unknown'; pill.className='chip info';
     }
 
+    function showPreview(prevJson){
+      const modal=document.getElementById('preview-modal');
+      const body=document.getElementById('preview-body');
+      const sub=document.getElementById('preview-sub');
+      const pretty = JSON.stringify(prevJson.messages, null, 2);
+      body.textContent = pretty;
+      sub.textContent = `Режим: ${prevJson.mode==='full_text'?'Полный текст':'Стандартный'} • Модель: gpt-5`;
+      modal.classList.add('show');
+      const close=()=>modal.classList.remove('show');
+      document.getElementById('preview-close').onclick=close;
+      document.getElementById('preview-cancel').onclick=close;
+      document.getElementById('preview-confirm').onclick=async()=>{
+        close();
+        // сохранить черновик для confirm
+        try { localStorage.setItem('pendingPreview', pretty); } catch {}
+        await performUpload(buildFormData());
+      };
+    }
+
+    function showAnalysisModal(data){
+      const modal=document.getElementById('confirm-modal');
+      const body=document.getElementById('confirm-body');
+      const subtitle=document.getElementById('confirm-sub');
+      const textarea=document.getElementById('confirm-edit');
+      const processed = typeof data.analysis==='string' ? data.analysis : JSON.stringify(data.analysisParsed || data.analysis, null, 2);
+      const rawDisplayed = data.analysis || processed;
+      body.textContent = rawDisplayed;
+      subtitle.textContent = data.filename;
+      try { localStorage.setItem('pendingAnalysisRaw', rawDisplayed); } catch {}
+      textarea.value = rawDisplayed;
+      modal.dataset.filename = data.filename;
+      modal.classList.add('show');
+    }
+
     document.getElementById('confirm-close').onclick = ()=>document.getElementById('confirm-modal').classList.remove('show');
     document.getElementById('confirm-cancel').onclick = ()=>document.getElementById('confirm-modal').classList.remove('show');
     document.getElementById('confirm-save').onclick = async ()=>{
@@ -511,6 +610,13 @@
       if(f){
         try{ const r=await fetch(`/api/analyses/${encodeURIComponent(f)}`); const txt=await r.text(); renderAnalysis(txt); }catch{}
       }
+      try {
+        const cached = localStorage.getItem('pendingAnalysisRaw');
+        if(cached){
+          const body=document.getElementById('analysis-content');
+          if(body && !body.textContent){ renderAnalysis(cached); }
+        }
+      } catch {}
     })();
   </script>
 </body>
