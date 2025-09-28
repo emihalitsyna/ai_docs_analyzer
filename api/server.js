@@ -564,7 +564,8 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
       res.json({
         success: true,
         filename: safeName,
-        analysis: analysisPayload || analysisJsonStr,
+        analysis: analysisJsonStr,
+        analysisParsed: analysisPayload,
         notion: { status: NOTION_TOKEN && NOTION_DATABASE_ID ? 'pending' : 'disabled' },
         retrieval: { vectorStore: usedVectorStoreId, assistant: OPENAI_ASSISTANT_ID ? true : false },
         retrievalFiles: retrievalFilesSummary,
